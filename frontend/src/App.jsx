@@ -14,6 +14,7 @@ import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 
 // Dashboard Pages
+import Dashboard from "./pages/Dashboard";
 import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import AgentDashboard from "./pages/dashboard/AgentDashboard";
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
@@ -88,24 +89,8 @@ function App() {
             <Route
               path="dashboard"
               element={
-                <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
-                  <AdminDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="dashboard"
-              element={
-                <ProtectedRoute allowedRoles={[ROLES.AGENT]}>
-                  <AgentDashboard />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="dashboard"
-              element={
-                <ProtectedRoute allowedRoles={[ROLES.STUDENT]}>
-                  <StudentDashboard />
+                <ProtectedRoute>
+                  <Dashboard />
                 </ProtectedRoute>
               }
             />

@@ -1,12 +1,30 @@
 import { createSlice } from '@reduxjs/toolkit';
 
-const initialState = {
-  user: null,
-  token: localStorage.getItem('token') || null,
-  isAuthenticated: !!localStorage.getItem('token'),
-  loading: false,
-  error: null,
+const getInitialAuth = () => {
+  try {
+    const storedUser = localStorage.getItem('user');
+    const storedToken = localStorage.getItem('token');
+    
+    return {
+      user: storedUser && storedUser !== 'undefined' ? JSON.parse(storedUser) : null,
+      token: storedToken && storedToken !== 'undefined' ? storedToken : null,
+      isAuthenticated: !!(storedToken && storedToken !== 'undefined'),
+      loading: false,
+      error: null,
+    };
+  } catch (error) {
+    console.error('Error reading auth from localStorage:', error);
+    return {
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      loading: false,
+      error: null,
+    };
+  }
 };
+
+const initialState = getInitialAuth();
 
 const authSlice = createSlice({
   name: 'auth',
