@@ -13,7 +13,7 @@ class AuthController {
    */
   static async login(req, res) {
     try {
-      const { email, password } = req.body;
+      const { email, password, role } = req.body;
 
       // Find user
       const user = await User.findOne({
@@ -34,6 +34,14 @@ class AuthController {
 
       if (!user) {
         return ResponseHandler.unauthorized(res, 'Invalid credentials');
+      }
+
+      // Validate role matches (if role is provided)
+      if (role && user.role !== role) {
+        return ResponseHandler.forbidden(
+          res,
+          `You are not authorized to login as ${role}. Your account role is ${user.role}.`
+        );
       }
 
       // Check password
@@ -74,7 +82,7 @@ class AuthController {
       // Log audit
       await AuditService.logLogin(user, req);
 
-      logger.info('User logged in', { userId: user.id, email: user.email });
+      logger.info('User logged in', { userId: user.id, email: user.email, role: user.role });
 
       return ResponseHandler.success(res, 'Login successful', {
         token,
@@ -84,6 +92,7 @@ class AuthController {
           email: user.email,
           role: user.role,
           phone: user.phone,
+          status: user.status,
         },
       });
     } catch (error) {

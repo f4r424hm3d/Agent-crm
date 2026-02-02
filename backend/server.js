@@ -44,6 +44,26 @@ app.get('/health', (req, res) => {
   });
 });
 
+app.get('/users', async (req, res) => {
+  try {
+    const [users] = await sequelize.query(
+      'SELECT * FROM users'
+    );
+
+    res.json({
+      success: true,
+      count: users.length,
+      data: users,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+
 // API Routes (to be added)
 app.get('/api', (req, res) => {
   res.json({
@@ -113,7 +133,7 @@ const startServer = async () => {
     }
 
     // Start server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`
 ╔═══════════════════════════════════════════════════╗
 ║                                                   ║
@@ -126,6 +146,20 @@ const startServer = async () => {
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
       `);
+    });
+
+    // Handle server errors
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(`\n❌ ERROR: Port ${PORT} is already in use!`);
+        console.error('\nSolution: Use the server management script');
+        console.error('  Run: ./server.sh restart');
+        console.error('\nOr manually kill the process:');
+        console.error(`  lsof -i :${PORT} | grep LISTEN | awk '{print $2}' | xargs kill -9\n`);
+        process.exit(1);
+      } else {
+        throw err;
+      }
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

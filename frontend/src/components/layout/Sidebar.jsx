@@ -15,6 +15,13 @@ import {
 } from "react-icons/fi";
 import { ROLES } from "../../utils/constants";
 
+const styles = {
+  "#custom-h1-class": {
+    color: "white",
+  },
+}
+
+
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
 
@@ -92,7 +99,7 @@ const Sidebar = ({ isOpen, onClose }) => {
       >
         {/* Logo */}
         <div className="h-16 flex items-center px-6 border-b border-primary-500">
-          <h1 className="text-xl font-bold">UniAdmit CRM</h1>
+          <h1 style={styles["#custom-h1-class"]} className="text-2xl text-white font-bold">UniAdmit CRM</h1>
         </div>
 
         {/* Navigation */}
@@ -103,10 +110,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                 <NavLink
                   to={item.path}
                   className={({ isActive }) =>
-                    `flex items-center px-4 py-3 rounded-lg transition-colors ${
-                      isActive
-                        ? "bg-accent-500 text-white"
-                        : "text-primary-100 hover:bg-primary-500"
+                    `flex items-center px-4 py-3 rounded-lg transition-colors ${isActive
+                      ? "bg-accent-500 text-white"
+                      : "text-primary-100 hover:bg-primary-500"
                     }`
                   }
                   onClick={() => window.innerWidth < 768 && onClose()}
@@ -139,5 +145,6 @@ const Sidebar = ({ isOpen, onClose }) => {
     </>
   );
 };
+
 
 export default Sidebar;

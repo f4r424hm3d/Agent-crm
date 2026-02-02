@@ -1,9 +1,9 @@
 // User Roles
 export const ROLES = {
-  SUPER_ADMIN: 'super_admin',
-  ADMIN: 'admin',
-  AGENT: 'agent',
-  STUDENT: 'student',
+  SUPER_ADMIN: 'SUPER_ADMIN',
+  ADMIN: 'ADMIN',
+  AGENT: 'AGENT',
+  STUDENT: 'STUDENT',
 };
 
 // Application Statuses

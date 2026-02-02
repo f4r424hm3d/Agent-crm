@@ -47,7 +47,7 @@ const Login = () => {
       const response = await authService.login(formData);
       dispatch(loginSuccess(response));
 
-      // Redirect based on role
+      // Redirect to dashboard (ProtectedRoute will handle role-based access)
       navigate("/dashboard");
     } catch (err) {
       dispatch(loginFailure(err.response?.data?.message || "Login failed"));
