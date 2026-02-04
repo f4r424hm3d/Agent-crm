@@ -9,6 +9,7 @@ import commissionReducer from './slices/commissionSlice';
 import payoutReducer from './slices/payoutSlice';
 import dashboardReducer from './slices/dashboardSlice';
 import auditLogReducer from './slices/auditLogSlice';
+import settingsReducer from './slices/settingsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -21,7 +22,9 @@ export const store = configureStore({
     commission: commissionReducer,
     payout: payoutReducer,
     dashboard: dashboardReducer,
+    dashboard: dashboardReducer,
     auditLog: auditLogReducer,
+    settings: settingsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

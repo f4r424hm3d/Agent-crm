@@ -52,7 +52,19 @@ export const agentService = {
   // Update bank details
   updateBankDetails: async (id, data) => {
     const response = await apiClient.put(`/agents/${id}/bank-details`, data);
-    return response.data;
+    return response.data.data || response.data;
+  },
+
+  // Update agent
+  updateAgent: async (id, data) => {
+    const response = await apiClient.put(`/agents/${id}`, data);
+    return response.data.data || response.data;
+  },
+
+  // Delete agent
+  deleteAgent: async (id) => {
+    const response = await apiClient.delete(`/agents/${id}`);
+    return response.data.data || response.data;
   },
 
   // Upload document

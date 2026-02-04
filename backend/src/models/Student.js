@@ -1,69 +1,118 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
-const Student = sequelize.define('Student', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+// Sub-schema for embedded documents
+const studentDocumentSchema = new mongoose.Schema({
+  documentType: {
+    type: String,
+    required: true
   },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    unique: true,
-    references: { model: 'users', key: 'id' },
-    onDelete: 'CASCADE',
+  documentName: {
+    type: String,
+    required: true
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'agents', key: 'id' },
+  documentUrl: {
+    type: String,
+    required: true
   },
-  date_of_birth: {
-    type: DataTypes.DATEONLY,
-    allowNull: true,
+  verified: {
+    type: Boolean,
+    default: false
   },
-  gender: {
-    type: DataTypes.ENUM('Male', 'Female', 'Other'),
-    allowNull: true,
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  nationality: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  passport_number: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
-  passport_expiry: {
-    type: DataTypes.DATEONLY,
-    allowNull: true,
-  },
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  city: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  country: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  postal_code: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-  },
-  academic_level: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
+  verifiedAt: Date
 }, {
-  tableName: 'students',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: { createdAt: true, updatedAt: false }
 });
 
-module.exports = Student;
+const studentSchema = new mongoose.Schema({
+  // Authentication
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
+  },
+  password: {
+    type: String,
+    required: true
+  },
+
+  // Personal details
+  name: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  phone: String,
+  dateOfBirth: Date,
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other']
+  },
+  nationality: String,
+  passportNumber: String,
+  passportExpiry: Date,
+
+  // Address
+  address: String,
+  city: String,
+  country: String,
+  postalCode: String,
+
+  // Academic
+  academicLevel: String,
+
+  // Agent reference
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent'
+  },
+
+  // Embedded documents array
+  documents: [studentDocumentSchema],
+
+  // Status
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  },
+  lastLogin: Date
+}, {
+  timestamps: true
+});
+
+// Indexes (email is already indexed via unique: true)
+studentSchema.index({ agentId: 1, status: 1 });
+studentSchema.index({ passportNumber: 1 });
+
+// Hash password before saving
+studentSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Compare password method
+studentSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Hide password in JSON responses
+studentSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
+module.exports = mongoose.model('Student', studentSchema);

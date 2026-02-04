@@ -1,61 +1,47 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const University = sequelize.define('University', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const universitySchema = new mongoose.Schema({
   name: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
+    type: String,
+    required: true
   },
   country: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+    type: String,
+    required: true
   },
-  city: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+  city: String,
+  logoUrl: String,
+  website: String,
+
+  defaultCommission: {
+    type: {
+      type: String,
+      enum: ['percentage', 'fixed'],
+      default: 'percentage'
+    },
+    value: {
+      type: Number,
+      default: 0
+    }
   },
-  logo: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-  },
-  website: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-  },
-  contact_email: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  contact_phone: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-  },
-  agreement_status: {
-    type: DataTypes.ENUM('pending', 'active', 'expired'),
-    defaultValue: 'pending',
-  },
-  agreement_start_date: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  agreement_end_date: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
+
   status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: 'active',
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
   },
+
+  // Denormalized stats
+  stats: {
+    totalCourses: { type: Number, default: 0 },
+    totalApplications: { type: Number, default: 0 }
+  }
 }, {
-  tableName: 'universities',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = University;
+// Indexes
+universitySchema.index({ country: 1, status: 1 });
+universitySchema.index({ name: 'text' });
+
+module.exports = mongoose.model('University', universitySchema);

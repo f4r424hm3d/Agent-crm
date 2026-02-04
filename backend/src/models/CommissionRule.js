@@ -1,49 +1,46 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const CommissionRule = sequelize.define('CommissionRule', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const commissionRuleSchema = new mongoose.Schema({
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent'
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'agents', key: 'id' },
+  universityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'University'
   },
-  university_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'universities', key: 'id' },
+  courseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Course'
   },
-  course_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'courses', key: 'id' },
+
+  commission: {
+    type: {
+      type: String,
+      enum: ['percentage', 'fixed'],
+      required: true
+    },
+    value: {
+      type: Number,
+      required: true
+    }
   },
-  commission_type: {
-    type: DataTypes.ENUM('percentage', 'flat'),
-    allowNull: false,
+
+  priority: {
+    type: Number,
+    default: 0
   },
-  commission_value: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
-  priority_level: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    comment: '1=Agent+Course, 2=Agent+University, 3=Course Default, 4=University Default',
-  },
-  active: {
-    type: DataTypes.BOOLEAN,
-    defaultValue: true,
-  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  }
 }, {
-  tableName: 'commission_rules',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = CommissionRule;
+// Indexes
+commissionRuleSchema.index({ agentId: 1, universityId: 1, courseId: 1 });
+commissionRuleSchema.index({ priority: -1 });
+
+module.exports = mongoose.model('CommissionRule', commissionRuleSchema);

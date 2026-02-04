@@ -5,7 +5,7 @@ const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
-const { sequelize, testConnection } = require('./src/config/database');
+const connectDB = require('./src/config/database');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -44,25 +44,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-app.get('/users', async (req, res) => {
-  try {
-    const [users] = await sequelize.query(
-      'SELECT * FROM users'
-    );
-
-    res.json({
-      success: true,
-      count: users.length,
-      data: users,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-});
-
 
 // API Routes (to be added)
 app.get('/api', (req, res) => {
@@ -84,6 +65,9 @@ const commissionRoutes = require('./src/routes/commissionRoutes');
 const payoutRoutes = require('./src/routes/payoutRoutes');
 const dashboardRoutes = require('./src/routes/dashboardRoutes');
 const auditLogRoutes = require('./src/routes/auditLogRoutes');
+const userRoutes = require('./src/routes/userRoutes');
+const settingsRoutes = require('./src/routes/settingsRoutes');
+const inquiryRoutes = require('./src/routes/inquiryRoutes');
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -96,6 +80,16 @@ app.use('/api/commissions', commissionRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/audit-logs', auditLogRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/inquiry', inquiryRoutes);
+app.use('/api/upload', require('./src/routes/uploadRoutes'));
+
+// Serve static files
+const path = require('path');
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 404 handler
 app.use((req, res) => {
@@ -123,14 +117,8 @@ app.use((err, req, res, next) => {
 // Initialize database and start server
 const startServer = async () => {
   try {
-    // Test database connection
-    await testConnection();
-
-    // Sync database (only in development)
-    if (process.env.NODE_ENV === 'development') {
-      await sequelize.sync({ alter: false });
-      console.log('✅ Database synchronized');
-    }
+    // Connect to MongoDB
+    await connectDB();
 
     // Start server
     const server = app.listen(PORT, () => {
@@ -143,6 +131,7 @@ const startServer = async () => {
 ║   Port: ${PORT}                                      ║
 ║   API: http://localhost:${PORT}/api                ║
 ║   Health: http://localhost:${PORT}/health          ║
+║   Database: MongoDB                               ║
 ║                                                   ║
 ╚═══════════════════════════════════════════════════╝
       `);
@@ -177,3 +166,4 @@ process.on('unhandledRejection', (err) => {
 startServer();
 
 module.exports = app;
+

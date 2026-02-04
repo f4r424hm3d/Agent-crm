@@ -28,7 +28,6 @@ const Login = () => {
     { value: ROLES.SUPER_ADMIN, label: "Super Admin" },
     { value: ROLES.ADMIN, label: "Admin" },
     { value: ROLES.AGENT, label: "Agent" },
-    { value: ROLES.STUDENT, label: "Student" },
   ];
 
   const handleChange = (e) => {
@@ -121,7 +120,7 @@ const Login = () => {
           <p className="text-sm text-gray-600">
             Don't have an account?{" "}
             <Link
-              to="/register/agent"
+              to="/agent-register"
               className="text-primary-600 hover:text-primary-700 font-medium"
             >
               Register as Agent

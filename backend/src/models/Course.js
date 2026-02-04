@@ -1,63 +1,50 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Course = sequelize.define('Course', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const courseSchema = new mongoose.Schema({
+  universityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'University',
+    required: true
   },
-  university_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'universities',
-      key: 'id',
-    },
-    onDelete: 'CASCADE',
-  },
+  universityName: String, // Denormalized
+
   name: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
+    type: String,
+    required: true
   },
   level: {
-    type: DataTypes.ENUM('Foundation', 'Undergraduate', 'Postgraduate', 'Diploma', 'Certificate', 'PhD'),
-    allowNull: false,
+    type: String,
+    enum: ['UG', 'PG', 'Diploma', 'Certificate'],
+    required: true
   },
-  duration: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
+  duration: String,
+  tuitionFee: {
+    type: Number,
+    default: 0
   },
-  tuition_fee: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
+  intake: String,
+  eligibility: String,
+
+  commission: {
+    type: {
+      type: String,
+      enum: ['percentage', 'fixed']
+    },
+    value: Number
   },
-  currency: {
-    type: DataTypes.STRING(10),
-    defaultValue: 'USD',
-  },
-  intake_dates: {
-    type: DataTypes.JSON,
-    allowNull: true,
-    comment: 'Array of intake dates',
-  },
-  eligibility: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  description: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
+
   status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: 'active',
-  },
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  }
 }, {
-  tableName: 'courses',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = Course;
+// Indexes
+courseSchema.index({ universityId: 1, status: 1 });
+courseSchema.index({ level: 1 });
+courseSchema.index({ name: 'text' });
+
+module.exports = mongoose.model('Course', courseSchema);

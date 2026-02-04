@@ -1,54 +1,45 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const AuditLog = sequelize.define('AuditLog', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const auditLogSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'users', key: 'id' },
+  userName: String, // Denormalized
+  userRole: String, // ADMIN, AGENT, etc.
+
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent'
   },
-  role: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
+  agentName: String, // Denormalized for agent actions
+
   action: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+    type: String,
+    required: true
   },
-  entity: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+  entityType: String,
+  entityId: mongoose.Schema.Types.ObjectId,
+
+  oldValues: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed
   },
-  entity_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
+  newValues: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed
   },
-  old_value: {
-    type: DataTypes.JSON,
-    allowNull: true,
-  },
-  new_value: {
-    type: DataTypes.JSON,
-    allowNull: true,
-  },
-  ip_address: {
-    type: DataTypes.STRING(45),
-    allowNull: true,
-  },
-  user_agent: {
-    type: DataTypes.STRING(255),
-    allowNull: true,
-  },
+
+  ipAddress: String,
+  userAgent: String,
+  description: String
 }, {
-  tableName: 'audit_logs',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: false,
+  timestamps: { createdAt: true, updatedAt: false }
 });
 
-module.exports = AuditLog;
+// Indexes
+auditLogSchema.index({ userId: 1, createdAt: -1 });
+auditLogSchema.index({ entityType: 1, entityId: 1 });
+auditLogSchema.index({ createdAt: -1 });
+
+module.exports = mongoose.model('AuditLog', auditLogSchema);

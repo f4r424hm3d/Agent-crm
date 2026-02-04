@@ -1,7 +1,6 @@
 const { Application, Agent, Student, University, Course, Commission, Payout, User } = require('../models');
 const ResponseHandler = require('../utils/responseHandler');
 const logger = require('../utils/logger');
-const { Op } = require('sequelize');
 
 class DashboardController {
   /**
@@ -11,41 +10,46 @@ class DashboardController {
   static async getAdminStats(req, res) {
     try {
       // Total counts
-      const totalApplications = await Application.count();
-      const totalAgents = await Agent.count({ where: { approval_status: 'approved' } });
-      const totalStudents = await Student.count();
-      const totalUniversities = await University.count({ where: { status: 'active' } });
-      const totalCourses = await Course.count({ where: { status: 'active' } });
+      const totalApplications = await Application.countDocuments();
+      const totalAgents = await Agent.countDocuments({ approvalStatus: 'approved' });
+      const totalStudents = await Student.countDocuments();
+      const totalUniversities = await University.countDocuments({ status: 'active' });
+      const totalCourses = await Course.countDocuments({ status: 'active' });
 
-      // Applications by status
-      const applicationsByStatus = await Application.findAll({
-        attributes: ['status', [Application.sequelize.fn('COUNT', Application.sequelize.col('id')), 'count']],
-        group: ['status'],
-        raw: true,
-      });
+      // Applications by status using aggregation
+      const applicationsByStatusRaw = await Application.aggregate([
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]);
 
-      // Total revenue (commissions)
-      const revenue = await Commission.findOne({
-        attributes: [[Commission.sequelize.fn('SUM', Commission.sequelize.col('commission_amount')), 'total']],
-        raw: true,
-      });
+      const applicationsByStatus = applicationsByStatusRaw.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {});
 
-      // Pending payouts
-      const pendingPayouts = await Payout.findOne({
-        where: { status: 'requested' },
-        attributes: [[Payout.sequelize.fn('SUM', Payout.sequelize.col('amount')), 'total']],
-        raw: true,
-      });
+      // Total revenue (commissions) using aggregation
+      const revenueRaw = await Commission.aggregate([
+        { $group: { _id: null, total: { $sum: '$commission_amount' } } }
+      ]);
+      const totalRevenue = revenueRaw.length > 0 ? revenueRaw[0].total : 0;
+
+      // Pending payouts using aggregation
+      const pendingPayoutsRaw = await Payout.aggregate([
+        { $match: { status: 'requested' } },
+        { $group: { _id: null, total: { $sum: '$amount' } } }
+      ]);
+      const pendingPayoutsAmount = pendingPayoutsRaw.length > 0 ? pendingPayoutsRaw[0].total : 0;
 
       // Recent applications
-      const recentApplications = await Application.findAll({
-        limit: 10,
-        include: ['student', 'agent', 'university', 'course'],
-        order: [['created_at', 'DESC']],
-      });
+      const recentApplications = await Application.find()
+        .limit(10)
+        .sort({ createdAt: -1 })
+        .populate('student')
+        .populate('agent')
+        .populate('university')
+        .populate('course');
 
       // Pending agent approvals
-      const pendingAgents = await Agent.count({ where: { approval_status: 'pending' } });
+      const pendingAgents = await Agent.countDocuments({ approvalStatus: 'pending' });
 
       const stats = {
         totalApplications,
@@ -53,13 +57,10 @@ class DashboardController {
         totalStudents,
         totalUniversities,
         totalCourses,
-        totalRevenue: parseFloat(revenue.total || 0),
-        pendingPayouts: parseFloat(pendingPayouts.total || 0),
+        totalRevenue,
+        pendingPayouts: pendingPayoutsAmount,
         pendingAgents,
-        applicationsByStatus: applicationsByStatus.reduce((acc, item) => {
-          acc[item.status] = parseInt(item.count);
-          return acc;
-        }, {}),
+        applicationsByStatus,
         recentApplications,
       };
 
@@ -76,66 +77,69 @@ class DashboardController {
    */
   static async getAgentStats(req, res) {
     try {
-      const agent_id = req.user.agent.id;
+      // Ensure we have the agent ID. In the auth middleware, it might be in req.user.agent._id
+      const agentId = req.user.agent?._id || req.user.id;
 
       // My students
-      const myStudents = await Student.count({ where: { agent_id } });
+      const myStudents = await Student.countDocuments({ agentId });
 
       // My applications
-      const myApplications = await Application.count({ where: { agent_id } });
+      const myApplications = await Application.countDocuments({ agentId });
 
       // Applications by status
-      const applicationsByStatus = await Application.findAll({
-        where: { agent_id },
-        attributes: ['status', [Application.sequelize.fn('COUNT', Application.sequelize.col('id')), 'count']],
-        group: ['status'],
-        raw: true,
-      });
+      const applicationsByStatusRaw = await Application.aggregate([
+        { $match: { agentId } },
+        { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]);
+
+      const applicationsByStatus = applicationsByStatusRaw.reduce((acc, item) => {
+        acc[item._id] = item.count;
+        return acc;
+      }, {});
 
       // Earnings
-      const totalEarnings = await Commission.findOne({
-        where: { agent_id },
-        attributes: [[Commission.sequelize.fn('SUM', Commission.sequelize.col('commission_amount')), 'total']],
-        raw: true,
-      });
+      const earningsStats = await Commission.aggregate([
+        { $match: { agentId } },
+        {
+          $group: {
+            _id: null,
+            totalEarnings: { $sum: '$commission_amount' },
+            pendingEarnings: {
+              $sum: { $cond: [{ $eq: ['$status', 'pending'] }, '$commission_amount', 0] }
+            },
+            approvedEarnings: {
+              $sum: { $cond: [{ $eq: ['$status', 'approved'] }, '$commission_amount', 0] }
+            },
+            paidEarnings: {
+              $sum: { $cond: [{ $eq: ['$status', 'paid'] }, '$commission_amount', 0] }
+            }
+          }
+        }
+      ]);
 
-      const pendingEarnings = await Commission.findOne({
-        where: { agent_id, status: 'pending' },
-        attributes: [[Commission.sequelize.fn('SUM', Commission.sequelize.col('commission_amount')), 'total']],
-        raw: true,
-      });
-
-      const approvedEarnings = await Commission.findOne({
-        where: { agent_id, status: 'approved' },
-        attributes: [[Commission.sequelize.fn('SUM', Commission.sequelize.col('commission_amount')), 'total']],
-        raw: true,
-      });
-
-      const paidEarnings = await Commission.findOne({
-        where: { agent_id, status: 'paid' },
-        attributes: [[Commission.sequelize.fn('SUM', Commission.sequelize.col('commission_amount')), 'total']],
-        raw: true,
-      });
+      const earnings = earningsStats.length > 0 ? earningsStats[0] : {
+        totalEarnings: 0,
+        pendingEarnings: 0,
+        approvedEarnings: 0,
+        paidEarnings: 0
+      };
 
       // Recent applications
-      const recentApplications = await Application.findAll({
-        where: { agent_id },
-        limit: 10,
-        include: ['student', 'university', 'course'],
-        order: [['created_at', 'DESC']],
-      });
+      const recentApplications = await Application.find({ agentId })
+        .limit(10)
+        .sort({ createdAt: -1 })
+        .populate('student')
+        .populate('university')
+        .populate('course');
 
       const stats = {
         myStudents,
         myApplications,
-        totalEarnings: parseFloat(totalEarnings.total || 0),
-        pendingEarnings: parseFloat(pendingEarnings.total || 0),
-        approvedEarnings: parseFloat(approvedEarnings.total || 0),
-        paidEarnings: parseFloat(paidEarnings.total || 0),
-        applicationsByStatus: applicationsByStatus.reduce((acc, item) => {
-          acc[item.status] = parseInt(item.count);
-          return acc;
-        }, {}),
+        totalEarnings: earnings.totalEarnings,
+        pendingEarnings: earnings.pendingEarnings,
+        approvedEarnings: earnings.approvedEarnings,
+        paidEarnings: earnings.paidEarnings,
+        applicationsByStatus,
         recentApplications,
       };
 
@@ -152,14 +156,14 @@ class DashboardController {
    */
   static async getStudentStats(req, res) {
     try {
-      const student_id = req.user.student.id;
+      const studentId = req.user.student?._id || req.user.id;
 
       // My applications
-      const applications = await Application.findAll({
-        where: { student_id },
-        include: ['university', 'course', 'agent'],
-        order: [['created_at', 'DESC']],
-      });
+      const applications = await Application.find({ studentId })
+        .sort({ createdAt: -1 })
+        .populate('university')
+        .populate('course')
+        .populate('agent');
 
       // Applications by status
       const applicationsByStatus = applications.reduce((acc, app) => {

@@ -1,60 +1,42 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Payout = sequelize.define('Payout', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const payoutSchema = new mongoose.Schema({
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent',
+    required: true
   },
-  payout_number: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    unique: true,
+  agentName: String, // Denormalized
+
+  totalAmount: {
+    type: Number,
+    required: true
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'agents', key: 'id' },
+  currency: {
+    type: String,
+    default: 'USD'
   },
-  amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
+  paymentMethod: String,
+  transactionId: String,
+
   status: {
-    type: DataTypes.ENUM('requested', 'approved', 'rejected', 'paid'),
-    defaultValue: 'requested',
+    type: String,
+    enum: ['pending', 'processing', 'completed', 'failed'],
+    default: 'pending'
   },
-  payment_method: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
+  processedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  payment_reference: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  requested_at: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
-  processed_by: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'users', key: 'id' },
-  },
-  processed_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
+  processedAt: Date,
+  paymentProofUrl: String,
+  notes: String
 }, {
-  tableName: 'payouts',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = Payout;
+// Indexes
+payoutSchema.index({ agentId: 1, status: 1 });
+payoutSchema.index({ createdAt: -1 });
+
+module.exports = mongoose.model('Payout', payoutSchema);
