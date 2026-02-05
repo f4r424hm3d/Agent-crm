@@ -51,8 +51,13 @@ import CourseDetails from "./pages/courses/CourseDetails";
 
 // Student Pages
 import StudentList from "./pages/students/StudentList";
+import CreateStudent from "./pages/students/CreateStudent";
 import StudentForm from "./pages/students/StudentForm";
 import StudentDetails from "./pages/students/StudentDetails";
+
+// Temp Import for testing
+
+import StudentTestForm from "./pages/students/StudentTestForm";
 
 // Application Pages
 import ApplicationList from "./pages/applications/ApplicationList";
@@ -80,6 +85,7 @@ import { useDispatch } from "react-redux";
 import { fetchSettings } from "./store/slices/settingsSlice";
 import { useEffect } from "react";
 
+
 function AppContent() {
   const dispatch = useDispatch();
 
@@ -99,6 +105,17 @@ function AppContent() {
       <Route path="/verify-otp" element={<VerifyOTP />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
+
+
+
+
+      {/* TEMP Route for testing */}
+      <Route path="/student-test" element={<StudentTestForm />} />
+
+
+
+
+
 
       {/* Protected Routes */}
       <Route
@@ -291,6 +308,16 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <StudentList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="students/create"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT]}
+            >
+              <CreateStudent />
             </ProtectedRoute>
           }
         />

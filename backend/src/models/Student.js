@@ -43,7 +43,12 @@ const studentSchema = new mongoose.Schema({
   },
 
   // Personal details
-  name: {
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
     type: String,
     required: true,
     trim: true
@@ -71,6 +76,12 @@ const studentSchema = new mongoose.Schema({
   agentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Agent'
+  },
+
+  // Referral tracking - who referred this student
+  referredBy: {
+    type: String, // Can be user ID, agent ID, or admin ID
+    default: null
   },
 
   // Embedded documents array

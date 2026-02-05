@@ -17,7 +17,7 @@ class AgentController {
       const { page = 1, limit = 10, status, search } = req.query;
       const skip = (page - 1) * limit;
 
-      const query = {};
+      const query = { approvalStatus: 'approved' };
       if (status) {
         query.approvalStatus = status;
       }
@@ -274,7 +274,7 @@ class AgentController {
   static async approveAgent(req, res) {
     try {
       const { id } = req.params;
-      const { approval_notes } = req.body;
+      const { notes } = req.body;
 
       const agent = await Agent.findById(id);
       if (!agent) {
@@ -285,36 +285,74 @@ class AgentController {
         return ResponseHandler.badRequest(res, 'Agent is already approved');
       }
 
-      // 1. Generate new random password
-      const plainPassword = crypto.randomBytes(8).toString('hex');
+      // 1. Generate password reset token (expires in 24 hours)
+      const resetToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
+      const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      // 2. Send Email FIRST
-      try {
-        await emailService.sendWelcomeWithCredentials(agent, plainPassword);
-      } catch (emailError) {
-        logger.error('Failed to send approval email', { error: emailError.message });
-        return ResponseHandler.serverError(res, 'Failed to send approval email. Agent not approved.', emailError);
+      // 2. Clean up invalid documents (filter out empty/incomplete documents)
+      if (agent.documents && Array.isArray(agent.documents)) {
+        agent.documents = agent.documents.filter(doc => doc && doc.url && doc.documentType);
       }
 
-      // 3. Hash Password
-      const hashedPassword = await bcrypt.hash(plainPassword, 10);
-
-      // 4. Update DB
+      // 3. Update agent status (instant approval)
       agent.approvalStatus = 'approved';
       agent.status = 'active';
       agent.approvedAt = new Date();
-      agent.approvedBy = req.user.id; // Changed from req.userId to req.user.id as per instruction
-      agent.approvalNotes = approval_notes;
-      agent.password = hashedPassword; // Update with HASHED password
+      agent.approvedBy = req.user.id;
+      agent.approvalReason = notes;
+      agent.passwordSetupToken = resetToken; // Use plain token (not hashed) for email
+      agent.passwordSetupExpires = tokenExpires;
 
       await agent.save();
 
+      // 3. Log audit
       await AuditService.logApprove(req.user, 'Agent', agent._id, {
         agentName: `${agent.firstName} ${agent.lastName}`,
-        approvalNotes: approval_notes,
+        approvalReason: notes,
       }, req);
 
-      return ResponseHandler.success(res, 'Agent approved and credentials sent successfully', { agent });
+      // 4. Send password setup email in BACKGROUND with RETRY (non-blocking)
+      // Using setImmediate to run after response is sent
+      setImmediate(async () => {
+        const maxRetries = 3;
+        let attempt = 0;
+        let emailSent = false;
+
+        while (attempt < maxRetries && !emailSent) {
+          attempt++;
+          try {
+            await emailService.sendPasswordSetupEmail(agent, resetToken);
+            logger.info('Password setup email sent successfully (Background)', {
+              agentId: agent._id,
+              email: agent.email,
+              attempt
+            });
+            emailSent = true;
+          } catch (emailError) {
+            logger.error(`Failed to send password setup email (Background) - Attempt ${attempt}/${maxRetries}`, {
+              agentId: agent._id,
+              email: agent.email,
+              error: emailError.message
+            });
+
+            // If not the last attempt, wait before retrying (exponential backoff)
+            if (attempt < maxRetries) {
+              const waitTime = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s
+              logger.info(`Retrying email send in ${waitTime}ms...`, { agentId: agent._id });
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            } else {
+              logger.error('All email send attempts failed. Manual intervention required.', {
+                agentId: agent._id,
+                email: agent.email
+              });
+            }
+          }
+        }
+      });
+
+      // 5. Return success immediately (don't wait for email)
+      return ResponseHandler.success(res, 'Agent approved successfully. Password setup email will be sent shortly.', { agent });
     } catch (error) {
       logger.error('Approve agent error', { error: error.message });
       return ResponseHandler.serverError(res, 'Failed to approve agent', error);
@@ -322,43 +360,43 @@ class AgentController {
   }
 
   /**
-   * Reject agent
+   * Reject (Decline) agent
    * PUT /api/agents/:id/reject
    */
   static async rejectAgent(req, res) {
     try {
       const { id } = req.params;
-      const { approval_notes } = req.body;
+      const { notes } = req.body;
 
       const agent = await Agent.findById(id);
       if (!agent) {
         return ResponseHandler.notFound(res, 'Agent not found');
       }
 
-      agent.approvalStatus = 'rejected';
-      agent.approvedBy = req.userId;
-      agent.rejectedAt = new Date();
-      agent.approvalNotes = approval_notes;
+      agent.approvalStatus = 'declined'; // Consistent with 'pending', 'approved', 'declined'
+      agent.approvedBy = req.user.id;
+      agent.declinedAt = new Date();
+      agent.approvalReason = notes;
       agent.status = 'inactive';
 
       await agent.save();
 
-      // Send rejection email
+      // Send rejection/decline email
       try {
-        await emailService.sendAgentRejectionEmail(agent, approval_notes);
+        await emailService.sendAgentRejectionEmail(agent, notes);
       } catch (emailError) {
         logger.error('Email notification failed', { error: emailError.message });
       }
 
       await AuditService.logReject(req.user, 'Agent', agent._id, {
         agentName: `${agent.firstName} ${agent.lastName}`,
-        approvalNotes: approval_notes,
+        approvalReason: notes,
       }, req);
 
-      return ResponseHandler.success(res, 'Agent rejected', { agent });
+      return ResponseHandler.success(res, 'Agent application declined', { agent });
     } catch (error) {
       logger.error('Reject agent error', { error: error.message });
-      return ResponseHandler.serverError(res, 'Failed to reject agent', error);
+      return ResponseHandler.serverError(res, 'Failed to decline agent', error);
     }
   }
 

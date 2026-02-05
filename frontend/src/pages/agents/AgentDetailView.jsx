@@ -48,14 +48,21 @@ const AgentDetailView = () => {
 
     const handleAction = async () => {
         try {
+            const notes = prompt(`Please provide any notes for this ${confirmAction.type === 'approve' ? 'approval' : 'decline'}:`);
+            if (notes === null) return; // User cancelled
+
             if (confirmAction.type === 'approve') {
-                await agentService.approveAgent(id);
-                success('Agent approved successfully!');
+                await agentService.approveAgent(id, { notes });
+                success('Agent approved successfully! Redirecting to agents list...');
+                // Redirect to agents page after approval
+                setTimeout(() => {
+                    navigate('/agents');
+                }, 1500); // 1.5 second delay to show success message
             } else if (confirmAction.type === 'reject') {
-                await agentService.rejectAgent(id);
-                success('Agent application rejected.');
+                await agentService.rejectAgent(id, { notes });
+                success('Agent application declined.');
+                fetchAgentDetails();
             }
-            fetchAgentDetails();
         } catch (error) {
             showError('Failed to process request');
         } finally {
@@ -125,6 +132,7 @@ const AgentDetailView = () => {
             approval: {
                 pending: 'bg-amber-50 text-amber-600 border-amber-100',
                 approved: 'bg-green-50 text-green-600 border-green-100',
+                declined: 'bg-red-50 text-red-600 border-red-100', // Changed from rejected
                 rejected: 'bg-red-50 text-red-600 border-red-100',
             },
             status: {
@@ -226,6 +234,14 @@ const AgentDetailView = () => {
                                     <DataRow label="Pincode" value={agent.pincode} />
                                     <DataRow label="Country" value={agent.country} />
                                 </div>
+                                <div className="border-t pt-4 mt-2">
+                                    <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 block mb-2">Request Origin</label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <DataRow label="IP Address" value={agent.ipAddress || 'Unknown'} />
+                                        <DataRow label="Device/OS" value={agent.os || 'Unknown'} />
+                                        <DataRow label="Browser" value={agent.browser || 'Unknown'} fullWidth />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
@@ -324,17 +340,17 @@ const AgentDetailView = () => {
                                 title="Verification Vault"
                                 subtitle="Official documents and registration certificates."
                             />
-                            {agent.documents && Object.keys(agent.documents).length > 0 ? (
+                            {agent.documents && agent.documents.length > 0 ? (
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    {Object.entries(agent.documents).map(([key, value]) => (
-                                        <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200 group hover:border-indigo-300 transition-all">
+                                    {agent.documents.map((doc, index) => (
+                                        <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200 group hover:border-indigo-300 transition-all">
                                             <div className="flex items-center">
                                                 <div className="p-2 bg-white rounded-xl mr-3 shadow-xs">
                                                     <FileText className="w-5 h-5 text-indigo-600" />
                                                 </div>
-                                                <div className="capitalize font-bold text-gray-600 text-sm">{key.replace(/_/g, ' ')}</div>
+                                                <div className="capitalize font-bold text-gray-600 text-sm">{doc.documentType}</div>
                                             </div>
-                                            <a href={value} target="_blank" rel="noopener noreferrer" className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all opacity-0 group-hover:opacity-100">
+                                            <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all opacity-0 group-hover:opacity-100">
                                                 <ExternalLink className="w-4 h-4" />
                                             </a>
                                         </div>
@@ -382,8 +398,8 @@ const AgentDetailView = () => {
                         <AlertDialogAction
                             onClick={handleAction}
                             className={`rounded-xl font-black text-white px-8 h-12 shadow-lg transition-all ${confirmAction.type === 'approve'
-                                    ? "bg-green-600 hover:bg-green-700 shadow-green-100"
-                                    : "bg-red-600 hover:bg-red-700 shadow-red-100"
+                                ? "bg-green-600 hover:bg-green-700 shadow-green-100"
+                                : "bg-red-600 hover:bg-red-700 shadow-red-100"
                                 }`}
                         >
                             {confirmAction.type === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}

@@ -6,7 +6,7 @@ import { useToast } from '../../components/ui/toast';
 
 const ForgotPassword = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { success, error: showError } = useToast();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -14,7 +14,7 @@ const ForgotPassword = () => {
     e.preventDefault();
 
     if (!email) {
-      toast({ title: 'Error', description: 'Please enter your email', variant: 'destructive' });
+      showError('Please enter your email');
       return;
     }
 
@@ -22,15 +22,24 @@ const ForgotPassword = () => {
 
     try {
       const response = await apiClient.post('/auth/forgot-password', { email });
+      const message = response.data.message || 'Email sent successfully';
 
-      toast({ title: 'Success', description: response.data.message || 'OTP sent to your email' });
+      success(message);
 
-      // Navigate to verify OTP page with email
-      navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
+      // Check if it's a setup link (not OTP)
+      if (message.includes('setup link')) {
+        // Setup link sent - redirect to login after showing message
+        setTimeout(() => {
+          navigate('/login');
+        }, 3000);
+      } else {
+        // OTP sent - navigate to verify OTP page
+        navigate(`/verify-otp?email=${encodeURIComponent(email)}`);
+      }
     } catch (error) {
       console.error('Forgot password error:', error);
-      const msg = error.response?.data?.message || 'Failed to send OTP';
-      toast({ title: 'Error', description: msg, variant: 'destructive' });
+      const msg = error.response?.data?.message || 'Failed to send email';
+      showError(msg);
     } finally {
       setIsSubmitting(false);
     }
@@ -84,8 +93,8 @@ const ForgotPassword = () => {
               type="submit"
               disabled={isSubmitting}
               className={`w-full py-3 px-4 rounded-lg font-medium text-white transition-colors ${isSubmitting
-                  ? 'bg-gray-400 cursor-not-allowed'
-                  : 'bg-blue-600 hover:bg-blue-700'
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700'
                 }`}
             >
               {isSubmitting ? 'Sending OTP...' : 'Send OTP'}

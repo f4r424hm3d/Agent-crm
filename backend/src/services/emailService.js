@@ -3,15 +3,41 @@ const logger = require('../utils/logger');
 
 class EmailService {
   constructor() {
-    this.transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: true, // true for port 465, false for other ports
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    // Lazy initialization - only create transporter when email is being sent
+    // This prevents blocking the server startup if SMTP is misconfigured
+    this.transporter = null;
+    this.createTransporter();
+  }
+
+  createTransporter() {
+    if (!this.transporter) {
+      this.transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: process.env.SMTP_PORT,
+        secure: process.env.SMTP_PORT == 465, // true for port 465, false for other ports
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD,
+        },
+        // Connection timeout and pool settings to prevent hanging
+        connectionTimeout: 5000, // 5 seconds
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
+        pool: true,
+        maxConnections: 5,
+        maxMessages: 100,
+      });
+
+      // Verify connection on creation (non-blocking)
+      this.transporter.verify((error) => {
+        if (error) {
+          logger.warn('SMTP connection verification failed (non-blocking)', { error: error.message });
+        } else {
+          logger.info('SMTP server is ready to send emails');
+        }
+      });
+    }
+    return this.transporter;
   }
 
   /**
@@ -19,6 +45,9 @@ class EmailService {
    */
   async sendEmail(to, subject, html, attachments = []) {
     try {
+      // Ensure transporter is created
+      const transporter = this.createTransporter();
+
       const mailOptions = {
         from: process.env.EMAIL_FROM,
         to,
@@ -27,7 +56,7 @@ class EmailService {
         attachments,
       };
 
-      const info = await this.transporter.sendMail(mailOptions);
+      const info = await transporter.sendMail(mailOptions);
       logger.info('Email sent successfully', { to, subject, messageId: info.messageId });
       return info;
     } catch (error) {
@@ -160,16 +189,17 @@ class EmailService {
    * Send password setup email (first-time)
    */
   async sendPasswordSetupEmail(agent, setupToken) {
-    const subject = 'Set Your Password - University CRM';
+    const subject = 'Agent Account Approved - Set Your Password';
     const setupUrl = `${process.env.FRONTEND_URL}/setup-password?token=${setupToken}`;
     const html = `
-      <h2>Welcome ${agent.firstName || agent.name}!</h2>
-      <p>Your agent account has been created successfully.</p>
-      <p>To secure your account, please set your password by clicking the link below:</p>
+      <h2>Congratulations ${agent.firstName || agent.name}!</h2>
+      <p>Your agent account has been <strong>approved</strong> by our admin team.</p>
+      <p><strong>Your Registered Email:</strong> ${agent.email}</p>
+      <p>To access your account, please set your password by clicking the link below:</p>
       <p style="margin: 20px 0;">
         <a href="${setupUrl}" 
            style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-          Secure Your Password
+          Set Your Password
         </a>
       </p>
       <p>Or copy and paste this link in your browser:</p>

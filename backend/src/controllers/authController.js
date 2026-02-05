@@ -210,7 +210,7 @@ class AuthController {
         account_holder_name,
         ifsc_code,
         swift_code,
-        status: 'active',
+        status: 'inactive',
         approvalStatus: AGENT_APPROVAL_STATUS.PENDING,
       });
 
@@ -407,7 +407,57 @@ class AuthController {
 
       // Check if password is set
       if (!agent.isPasswordSet) {
-        return ResponseHandler.badRequest(res, 'Please complete password setup first');
+        // Password not set yet - resend setup link instead of OTP
+        const crypto = require('crypto');
+
+        // Generate new password setup token (expires in 24 hours)
+        const setupToken = crypto.randomBytes(32).toString('hex');
+        const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        // Update agent with new token
+        agent.passwordSetupToken = setupToken;
+        agent.passwordSetupExpires = tokenExpires;
+        await agent.save();
+
+        // Send password setup email with retry mechanism
+        const maxRetries = 3;
+        let attempt = 0;
+        let emailSent = false;
+        let lastError = null;
+
+        while (attempt < maxRetries && !emailSent) {
+          attempt++;
+          try {
+            await emailService.sendPasswordSetupEmail(agent, setupToken);
+            emailSent = true;
+            logger.info('Password setup link resent (expired token case)', {
+              agentId: agent._id,
+              email: agent.email,
+              attempt
+            });
+          } catch (emailError) {
+            lastError = emailError;
+            logger.error(`Failed to send setup email - Attempt ${attempt}/${maxRetries}`, {
+              agentId: agent._id,
+              error: emailError.message
+            });
+
+            if (attempt < maxRetries) {
+              const waitTime = Math.pow(2, attempt) * 500;
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+          }
+        }
+
+        if (!emailSent) {
+          logger.error('All setup email send attempts failed', {
+            agentId: agent._id,
+            error: lastError?.message
+          });
+          return ResponseHandler.serverError(res, 'Failed to send setup link. Please contact support.');
+        }
+
+        return ResponseHandler.success(res, 'Password setup link has been sent to your email (valid for 24 hours)');
       }
 
       // Generate OTP
@@ -419,15 +469,45 @@ class AuthController {
       agent.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
       await agent.save();
 
-      // Send OTP email
-      try {
-        await emailService.sendPasswordResetOTP(agent, otp);
-      } catch (emailError) {
-        logger.error('Failed to send OTP email', { error: emailError.message });
-        return ResponseHandler.serverError(res, 'Failed to send OTP email');
+      // Send OTP email with retry mechanism
+      const maxRetries = 3;
+      let attempt = 0;
+      let emailSent = false;
+      let lastError = null;
+
+      while (attempt < maxRetries && !emailSent) {
+        attempt++;
+        try {
+          await emailService.sendPasswordResetOTP(agent, otp);
+          emailSent = true;
+          logger.info('Password reset OTP sent', {
+            agentId: agent._id,
+            email: agent.email,
+            attempt
+          });
+        } catch (emailError) {
+          lastError = emailError;
+          logger.error(`Failed to send OTP email - Attempt ${attempt}/${maxRetries}`, {
+            agentId: agent._id,
+            error: emailError.message
+          });
+
+          // If not the last attempt, wait before retrying
+          if (attempt < maxRetries) {
+            const waitTime = Math.pow(2, attempt) * 500; // 1s, 2s, 4s
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
       }
 
-      logger.info('Password reset OTP sent', { agentId: agent._id, email: agent.email });
+      // If all retries failed, return error
+      if (!emailSent) {
+        logger.error('All OTP email send attempts failed', {
+          agentId: agent._id,
+          error: lastError?.message
+        });
+        return ResponseHandler.serverError(res, 'Failed to send OTP email. Please try again later.');
+      }
 
       return ResponseHandler.success(res, 'OTP has been sent to your email');
     } catch (error) {

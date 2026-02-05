@@ -9,7 +9,7 @@ import PasswordRequirements from '../../components/ui/PasswordRequirements';
 const SetupPassword = () => {
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
-    const { toast } = useToast();
+    const { success: showSuccess, error: showError } = useToast();
     const token = searchParams.get('token');
 
     const [formData, setFormData] = useState({
@@ -25,12 +25,12 @@ const SetupPassword = () => {
         e.preventDefault();
 
         if (formData.password !== formData.confirmPassword) {
-            toast({ title: 'Error', description: 'Passwords do not match', variant: 'destructive' });
+            showError('Passwords do not match');
             return;
         }
 
         if (!token) {
-            toast({ title: 'Error', description: 'Invalid or missing token', variant: 'destructive' });
+            showError('Invalid or missing token');
             return;
         }
 
@@ -44,7 +44,7 @@ const SetupPassword = () => {
             });
 
             setSuccess(true);
-            toast({ title: 'Success', description: response.data.message || 'Password set successfully!' });
+            showSuccess(response.data.message || 'Password set successfully!');
 
             // Redirect to login after 2 seconds
             setTimeout(() => {
@@ -53,7 +53,7 @@ const SetupPassword = () => {
         } catch (error) {
             console.error('Setup password error:', error);
             const msg = error.response?.data?.message || 'Failed to setup password';
-            toast({ title: 'Error', description: msg, variant: 'destructive' });
+            showError(msg);
         } finally {
             setIsSubmitting(false);
         }

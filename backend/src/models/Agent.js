@@ -96,28 +96,26 @@ const agentSchema = new mongoose.Schema({
   status: {
     type: String,
     enum: ['active', 'inactive'],
-    default: 'active'
-  },
-  // Status fields
-  status: {
-    type: String,
-    enum: ['active', 'inactive'],
-    default: 'active'
+    default: 'inactive'
   },
   approvalStatus: {
     type: String,
-    enum: ['pending', 'approved', 'rejected'],
-    default: 'pending',
-    alias: 'approval_status' // Map approval_status to approvalStatus
+    enum: ['pending', 'approved', 'declined'],
+    default: 'pending'
   },
-  approvalNotes: String,
+  approvalReason: String,
   approvedBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
   approvedAt: Date,
-  rejectedAt: Date,
+  declinedAt: Date,
   lastLogin: Date,
+
+  // Tracking Fields
+  ipAddress: String,
+  browser: String,
+  os: String,
 
   // Password Management
   isPasswordSet: {
@@ -132,11 +130,22 @@ const agentSchema = new mongoose.Schema({
   passwordResetExpires: Date,
 
   // Documents
-  documents: {
-    type: Map,
-    of: String,
-    default: {}
-  },
+  documents: [
+    {
+      documentType: {
+        type: String,
+        required: true
+      },
+      url: {
+        type: String,
+        required: true
+      },
+      uploadedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ],
 
   // Stats (denormalized)
   stats: {

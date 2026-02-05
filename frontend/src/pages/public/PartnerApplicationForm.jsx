@@ -76,16 +76,31 @@ const PartnerApplicationForm = () => {
         }));
     };
 
+
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
 
+        // Detect OS and Browser
+        const userAgent = window.navigator.userAgent;
+        let os = "Unknown OS";
+        if (userAgent.indexOf("Windows") !== -1) os = "Windows";
+        if (userAgent.indexOf("Mac") !== -1) os = "MacOS";
+        if (userAgent.indexOf("X11") !== -1) os = "UNIX";
+        if (userAgent.indexOf("Linux") !== -1) os = "Linux";
+
+        const submissionData = {
+            ...formData,
+            os: os,
+            browser: navigator.appName || 'Unknown'
+        };
+
         try {
-            // Using /inquiry/partner-application as defined in backend routes
-            const response = await apiClient.post('/inquiry/partner-application', formData);
+            const response = await apiClient.post('/inquiry/partner-application', submissionData);
             if (response.data && response.data.success) {
                 toast.success(response.data.message || 'Application submitted successfully!');
-                navigate('/'); // Navigate to home or confirmation page
+                navigate('/');
             } else {
                 toast.error(response.data?.message || 'Submission failed.');
             }
@@ -155,7 +170,7 @@ const PartnerApplicationForm = () => {
                                 </div>
                                 {step < 5 && (
                                     <div className={`flex-1 h-1 mx-1 sm:mx-2 ${step < currentStep ? 'bg-blue-600' : 'bg-gray-200'
-                                        } w-8 sm:w-12 md:w-16`} />
+                                        } w-8 sm:w-10 md:w-12`} />
                                 )}
                             </div>
                         ))}

@@ -16,7 +16,7 @@ import { useToast } from '../../components/ui/toast';
 
 const ApplicationList = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { success, error: showError } = useToast();
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -35,7 +35,7 @@ const ApplicationList = () => {
       setApplications(apps);
     } catch (error) {
       console.error('Error fetching applications:', error);
-      toast({ title: "Error", description: "Failed to load applications", variant: "destructive" });
+      showError("Failed to load applications");
     } finally {
       setLoading(false);
     }
@@ -48,14 +48,14 @@ const ApplicationList = () => {
     try {
       if (type === 'approve') {
         await agentService.approveAgent(id);
-        toast({ title: "Success", description: "Agent approved successfully", variant: "default" });
+        success("Agent approved successfully");
       } else if (type === 'reject') {
         await agentService.rejectAgent(id);
-        toast({ title: "Success", description: "Agent application rejected", variant: "default" });
+        success("Agent application rejected");
       }
       fetchApplications(); // Refresh list
-    } catch (error) {
-      toast({ title: "Error", description: `Failed to ${type} agent`, variant: "destructive" });
+    } catch (err) {
+      showError(`Failed to ${type} agent`);
     } finally {
       setConfirmAction({ id: null, type: null, isOpen: false });
     }
