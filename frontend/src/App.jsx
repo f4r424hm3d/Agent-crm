@@ -329,7 +329,7 @@ function AppContent() {
             <ProtectedRoute
               allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT]}
             >
-              <CreateStudent />
+              <StudentForm />
             </ProtectedRoute>
           }
         />
