@@ -15,6 +15,7 @@ import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 import SetupPassword from "./pages/auth/SetupPassword";
 import VerifyOTP from "./pages/auth/VerifyOTP";
+import RoleSelection from "./pages/auth/RoleSelection";
 import StudentSetupPassword from "./pages/auth/student/StudentSetupPassword";
 import StudentForgotPassword from "./pages/auth/student/StudentForgotPassword";
 import StudentVerifyOTP from "./pages/auth/student/StudentVerifyOTP";
@@ -104,6 +105,7 @@ function AppContent() {
   return (
     <Routes>
       {/* Public Routes */}
+      <Route path="/" element={<RoleSelection />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register/agent" element={<RegisterAgent />} />
       <Route path="/register/student" element={<RegisterStudent />} />
@@ -140,17 +142,15 @@ function AppContent() {
 
 
 
-      {/* Protected Routes */}
+      {/* Protected Routes - Layout only, no path to avoid conflict with root landing page */}
       <Route
-        path="/"
         element={
           <ProtectedRoute>
             <DashboardLayout />
           </ProtectedRoute>
         }
       >
-        {/* Dashboard */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Individual Protected Routes */}
         <Route
           path="dashboard"
           element={
