@@ -1,4 +1,19 @@
-import { createSlice } from '@reduxjs/toolkit';
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import dashboardService from '../../services/dashboardService';
+
+export const fetchDashboardData = createAsyncThunk(
+  'dashboard/fetchData',
+  async (_, { getState, rejectWithValue }) => {
+    try {
+      const { auth } = getState();
+      const role = auth.user?.role;
+      const data = await dashboardService.getDashboardData(role);
+      return data.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch dashboard data');
+    }
+  }
+);
 
 const initialState = {
   stats: {
@@ -44,6 +59,23 @@ const dashboardSlice = createSlice({
     clearError: (state) => {
       state.error = null;
     },
+  },
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchDashboardData.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchDashboardData.fulfilled, (state, action) => {
+        state.loading = false;
+        state.stats = action.payload || initialState.stats;
+        state.recentApplications = action.payload?.recentApplications || [];
+        state.error = null;
+      })
+      .addCase(fetchDashboardData.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
+      });
   },
 });
 

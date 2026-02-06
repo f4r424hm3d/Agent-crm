@@ -55,9 +55,13 @@ import CreateStudent from "./pages/students/CreateStudent";
 import StudentForm from "./pages/students/StudentForm";
 import StudentDetails from "./pages/students/StudentDetails";
 
-// Temp Import for testing
-
+// Public Pages
 import StudentTestForm from "./pages/students/StudentTestForm";
+import PublicStudentRegistration from "./pages/public/PublicStudentRegistration";
+import RegistrationSuccess from "./pages/public/RegistrationSuccess";
+
+// Guards
+import RequireReferral from "./components/guards/RequireReferral";
 
 // Application Pages
 import ApplicationList from "./pages/applications/ApplicationList";
@@ -106,10 +110,18 @@ function AppContent() {
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/unauthorized" element={<Unauthorized />} />
 
+      {/* Public Student Registration Routes - Requires Valid Referral */}
+      <Route path="/student-registration" element={
+        <RequireReferral>
+          <PublicStudentRegistration />
+        </RequireReferral>
+      } />
+      <Route path="/registration-success" element={<RegistrationSuccess />} />
 
+      {/* 404 Page */}
+      <Route path="/404" element={<NotFound />} />
 
-
-      {/* TEMP Route for testing */}
+      {/* TEMP Route for testing (old form) */}
       <Route path="/student-test" element={<StudentTestForm />} />
 
 

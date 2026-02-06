@@ -3,6 +3,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const cookieParser = require('cookie-parser');
 require('dotenv').config();
 
 const connectDB = require('./src/config/database');
@@ -14,13 +15,16 @@ const PORT = process.env.PORT || 5000;
 app.use(helmet());
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
-  credentials: true,
+  credentials: true, // Important for cookies
 }));
 
-// Rate limiting
+// Cookie parser middleware
+app.use(cookieParser());
+
+// Rate limiting - Increased for development
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // Increased to 1000 for development
   message: 'Too many requests from this IP, please try again later.',
 });
 app.use('/api/', limiter);
@@ -68,6 +72,21 @@ const auditLogRoutes = require('./src/routes/auditLogRoutes');
 const userRoutes = require('./src/routes/userRoutes');
 const settingsRoutes = require('./src/routes/settingsRoutes');
 const inquiryRoutes = require('./src/routes/inquiryRoutes');
+const studentDraftRoutes = require('./src/routes/studentDraftRoutes');
+const otpRoutes = require('./src/routes/otpRoutes');
+const { validateReferral } = require('./src/middleware/referralValidation');
+
+// Public referral validation endpoint (no auth required)
+app.get('/api/validate-referral', validateReferral, (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Referral validated successfully',
+    referrer: {
+      name: req.referralInfo.name,
+      role: req.referralInfo.role
+    }
+  });
+});
 
 // Register routes
 app.use('/api/auth', authRoutes);
@@ -76,6 +95,8 @@ app.use('/api/applications', applicationRoutes);
 app.use('/api/universities', universityRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/students', studentRoutes);
+app.use('/api/students/draft', studentDraftRoutes); // Draft/resume routes
+app.use('/api/otp', otpRoutes); // OTP verification routes
 app.use('/api/commissions', commissionRoutes);
 app.use('/api/payouts', payoutRoutes);
 app.use('/api/dashboard', dashboardRoutes);

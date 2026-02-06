@@ -25,39 +25,32 @@ import {
     Cell,
 } from "recharts";
 
+import { fetchDashboardData } from "../../store/slices/dashboardSlice";
+
 const AdminDashboard = () => {
     const dispatch = useDispatch();
-    const { stats, recentApplications, chartData, loading } = useSelector(
+    const { stats, recentApplications, loading } = useSelector(
         (state) => state.dashboard,
     );
 
-    // Mock data for demonstration
-    const mockStats = {
-        totalApplications: 1245,
-        activeAgents: 87,
-        totalRevenue: 456789,
-        pendingPayouts: 23450,
-        totalStudents: 2156,
-        totalUniversities: 145,
-        totalCourses: 892,
-    };
+    useEffect(() => {
+        dispatch(fetchDashboardData());
+    }, [dispatch]);
 
-    const mockApplicationData = [
-        { name: "Jan", applications: 65 },
-        { name: "Feb", applications: 78 },
-        { name: "Mar", applications: 95 },
-        { name: "Apr", applications: 112 },
-        { name: "May", applications: 135 },
-        { name: "Jun", applications: 98 },
+    const applicationTrendData = [
+        { name: "Jan", applications: 0 },
+        { name: "Feb", applications: 0 },
+        { name: "Mar", applications: 0 },
+        { name: "Apr", applications: 0 },
+        { name: "May", applications: 0 },
+        { name: "Jun", applications: 0 },
     ];
 
-    const mockStatusData = [
-        { name: "Submitted", value: 45, color: "#3b82f6" },
-        { name: "Under Review", value: 25, color: "#f59e0b" },
-        { name: "Offer Issued", value: 15, color: "#8b5cf6" },
-        { name: "Enrolled", value: 10, color: "#22c55e" },
-        { name: "Rejected", value: 5, color: "#ef4444" },
-    ];
+    const statusDistributionData = Object.entries(stats?.applicationsByStatus || {}).map(([name, value]) => ({
+        name,
+        value,
+        color: name === 'submitted' ? '#3b82f6' : name === 'under_review' ? '#f59e0b' : '#8b5cf6'
+    }));
 
     const StatCard = ({ icon: Icon, label, value, color, trend, link }) => (
         <Card className="hover:shadow-md transition-shadow">
@@ -112,30 +105,30 @@ const AdminDashboard = () => {
                 <StatCard
                     icon={FiFileText}
                     label="Total Applications"
-                    value={mockStats.totalApplications}
+                    value={stats.totalApplications || 0}
                     color="bg-primary-500"
-                    trend="+12% from last month"
+                    trend={null}
                     link="/applications"
                 />
                 <StatCard
                     icon={FiUsers}
                     label="Active Agents"
-                    value={mockStats.activeAgents}
+                    value={stats.totalAgents || 0}
                     color="bg-secondary-500"
-                    trend="+5% from last month"
+                    trend={null}
                     link="/agents"
                 />
                 <StatCard
                     icon={FiDollarSign}
                     label="Total Revenue"
-                    value={`$${mockStats.totalRevenue.toLocaleString()}`}
+                    value={`$${(stats.totalRevenue || 0).toLocaleString()}`}
                     color="bg-accent-500"
-                    trend="+18% from last month"
+                    trend={null}
                 />
                 <StatCard
                     icon={FiTrendingUp}
                     label="Pending Payouts"
-                    value={`$${mockStats.pendingPayouts.toLocaleString()}`}
+                    value={`$${(stats.pendingPayouts || 0).toLocaleString()}`}
                     color="bg-amber-500"
                     link="/payouts/requests"
                 />
@@ -146,21 +139,21 @@ const AdminDashboard = () => {
                 <StatCard
                     icon={FiGrid}
                     label="Universities"
-                    value={mockStats.totalUniversities}
+                    value={stats.totalUniversities || 0}
                     color="bg-purple-500"
                     link="/universities"
                 />
                 <StatCard
                     icon={FiBook}
                     label="Courses"
-                    value={mockStats.totalCourses}
+                    value={stats.totalCourses || 0}
                     color="bg-blue-500"
                     link="/courses"
                 />
                 <StatCard
                     icon={FiUsers}
                     label="Students"
-                    value={mockStats.totalStudents}
+                    value={stats.totalStudents || 0}
                     color="bg-green-500"
                     link="/students"
                 />
@@ -175,7 +168,7 @@ const AdminDashboard = () => {
                     </Card.Header>
                     <Card.Body>
                         <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={mockApplicationData}>
+                            <BarChart data={applicationTrendData}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="name" />
                                 <YAxis />
@@ -198,7 +191,7 @@ const AdminDashboard = () => {
                         <ResponsiveContainer width="100%" height={300}>
                             <PieChart>
                                 <Pie
-                                    data={mockStatusData}
+                                    data={statusDistributionData}
                                     cx="50%"
                                     cy="50%"
                                     labelLine={false}
@@ -209,7 +202,7 @@ const AdminDashboard = () => {
                                     fill="#8884d8"
                                     dataKey="value"
                                 >
-                                    {mockStatusData.map((entry, index) => (
+                                    {statusDistributionData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
