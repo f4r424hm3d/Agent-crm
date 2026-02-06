@@ -12,12 +12,14 @@ import Button from "../../components/common/Button";
 import Select from "../../components/common/Select";
 import Alert from "../../components/common/Alert";
 import { ROLES } from "../../utils/constants";
+import { selectSettings } from "../../store/slices/settingsSlice";
 import { Mail, Lock, UserCircle, ArrowLeft, ShieldCheck, ChevronRight } from "lucide-react";
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { loading, error } = useSelector((state) => state.auth);
+  const settings = useSelector(selectSettings);
   const [searchParams] = useSearchParams();
   const initialRole = searchParams.get("role") || "";
 
@@ -86,8 +88,8 @@ const Login = () => {
         <div className="bg-white rounded-3xl shadow-[0_20px_50px_rgba(0,0,0,0.2)] overflow-hidden border border-white/20">
           {/* Header Section */}
           <div className={`p-8 pb-4 text-center text-white bg-gradient-to-r ${currentGradient} relative`}>
-            <h1 className="text-3xl font-black tracking-tighter mb-1">
-              UNIADMIT <span className="font-light opacity-80 uppercase text-sm tracking-widest block mt-1">Global Education Portal</span>
+            <h1 className="text-3xl font-black tracking-tighter mb-1 uppercase">
+              {settings.platform_name || ''} <span className="font-light opacity-80 uppercase text-sm tracking-widest block mt-1">Global Education Portal</span>
             </h1>
             <div className="absolute bottom-[-24px] left-1/2 transform -translate-x-1/2 w-12 h-12 bg-white rounded-2xl shadow-lg flex items-center justify-center text-primary-600 border border-gray-100">
               <ShieldCheck size={24} />
@@ -99,7 +101,9 @@ const Login = () => {
               <h2 className="text-2xl font-bold text-gray-900 tracking-tight">
                 {formData.role ? `${currentRoleLabel} Login` : "Secure Sign In"}
               </h2>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Access your personal dashboard</p>
+              <p className="text-gray-500 mt-2 text-sm font-medium leading-relaxed">
+                {settings.site_description || `Access your personal dashboard and manage your operations${settings.platform_name ? ` with ${settings.platform_name}` : ''}.`}
+              </p>
             </div>
 
             {error && <Alert type="error" message={error} className="mb-6 rounded-2xl animate-shake" />}
@@ -196,7 +200,7 @@ const Login = () => {
                 </div>
               ) : (
                 <div className="text-center space-y-3">
-                  <p className="text-sm text-gray-500 font-medium">New to UniAdmit?</p>
+                  <p className="text-sm text-gray-500 font-medium">New to the Portal?</p>
                   <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                     <Link to="/agent-register" className="text-sm font-bold text-primary-600 hover:text-primary-700 px-4 py-2 bg-primary-50 rounded-xl transition-colors w-full sm:w-auto">
                       Agent Registration
@@ -212,7 +216,7 @@ const Login = () => {
         </div>
 
         <p className="text-center mt-8 text-white/70 text-sm font-medium">
-          &copy; {new Date().getFullYear()} Britannica Overseas Education. All rights reserved.
+          &copy; {new Date().getFullYear()} {settings.platform_name || ''}. All rights reserved.
         </p>
       </div>
     </div>

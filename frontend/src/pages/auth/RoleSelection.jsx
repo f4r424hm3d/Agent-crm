@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { ShieldAlert, UserCog, UserCheck, GraduationCap, ArrowRight, Users } from 'lucide-react';
 import { ROLES } from '../../utils/constants';
+import { selectSettings } from '../../store/slices/settingsSlice';
 
 const RoleCard = ({ role, title, description, icon: Icon, color, onClick }) => (
     <button
@@ -48,6 +49,7 @@ const RoleCard = ({ role, title, description, icon: Icon, color, onClick }) => (
 const RoleSelection = () => {
     const navigate = useNavigate();
     const { isAuthenticated } = useSelector((state) => state.auth);
+    const settings = useSelector(selectSettings);
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -104,13 +106,13 @@ const RoleSelection = () => {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-primary-500"></span>
                         </span>
-                        <span>Welcome to Britannica Overseas CRM</span>
+                        <span>{settings.platform_name ? `Welcome to ${settings.platform_name} CRM` : 'Welcome to the Portal'}</span>
                     </div>
                     <h1 className="text-5xl font-extrabold text-gray-900 tracking-tight sm:text-6xl mb-6">
                         Choose your <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-600 to-indigo-600">Portal</span>
                     </h1>
-                    <p className="text-xl text-gray-600">
-                        Select your professional role below to proceed to your specialized dashboard and manage your operations.
+                    <p className="text-xl text-gray-600 leading-relaxed">
+                        {settings.site_description || "Please select your role below to access your specialized dashboard."}
                     </p>
                 </div>
 
@@ -135,7 +137,7 @@ const RoleSelection = () => {
                             <div className="text-center md:text-left">
                                 <h2 className="text-3xl font-bold text-white mb-4">Want to Grow with Us?</h2>
                                 <p className="text-emerald-50 text-lg max-w-xl">
-                                    Join our global network of education partners. Help students achieve their dreams while growing your business with UniAdmit.
+                                    Join our global network of education partners. Help students achieve their dreams while growing your business{settings.platform_name ? ` with ${settings.platform_name}` : ''}.
                                 </p>
                             </div>
                             <button
@@ -156,8 +158,7 @@ const RoleSelection = () => {
                     </p>
                     <div className="mt-8 flex justify-center space-x-6 grayscale opacity-60">
                         {/* Simple logos or text placeholders for branding */}
-                        <span className="font-bold text-xl text-gray-400">UniAdmit</span>
-                        <span className="font-bold text-xl text-gray-400">Britannica</span>
+                        {settings.platform_name && <span className="font-bold text-xl text-gray-400">{settings.platform_name}</span>}
                     </div>
                 </div>
             </div>

@@ -173,6 +173,18 @@ const Settings = () => {
                         <div className="space-y-6 max-w-2xl">
                             <SectionHeader title="Brand Identity" description="Manage your logos and platform name." />
                             <InputField label="Platform Name" name="platform_name" placeholder="Britannica Overseas" />
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Platform Tagline / Description</label>
+                                <textarea
+                                    name="site_description"
+                                    value={settings.site_description || ''}
+                                    onChange={handleInputChange}
+                                    rows={3}
+                                    className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                                    placeholder="Select your professional role below to proceed to your specialized dashboard..."
+                                />
+                                <p className="text-xs text-gray-400 mt-1">This description appears on the landing and login pages (2-3 lines recommended).</p>
+                            </div>
                             <ImageUpload label="Logo (Light Theme)" name="logo_light" />
                             <ImageUpload label="Logo (Dark Theme)" name="logo_dark" />
                             <ImageUpload label="Favicon" name="site_favicon" />
