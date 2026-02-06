@@ -3,7 +3,12 @@ import apiClient from './apiClient';
 export const authService = {
   // Login
   login: async (credentials) => {
-    const response = await apiClient.post('/auth/login', credentials);
+    // Route to correct endpoint based on role
+    const endpoint = credentials.role === 'AGENT'
+      ? '/auth/agent-login'
+      : '/auth/login';
+
+    const response = await apiClient.post(endpoint, credentials);
     // Extract data object from response
     return response.data.data || response.data;
   },

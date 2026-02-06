@@ -1,73 +1,69 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
-const bcrypt = require('bcryptjs');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
-const User = sequelize.define('User', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
-  },
+const userSchema = new mongoose.Schema({
   role: {
-    type: DataTypes.ENUM('SUPER_ADMIN', 'ADMIN', 'AGENT', 'STUDENT'),
-    allowNull: false,
+    type: String,
+    enum: ['SUPER_ADMIN', 'ADMIN'],
+    required: true
   },
   name: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+    type: String,
+    required: true,
+    trim: true
   },
   email: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+    type: String,
+    required: true,
     unique: true,
-    validate: {
-      isEmail: true,
-    },
+    lowercase: true,
+    trim: true
   },
   phone: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
+    type: String,
+    trim: true
   },
   password: {
-    type: DataTypes.STRING(255),
-    allowNull: false,
+    type: String,
+    required: true
   },
   status: {
-    type: DataTypes.ENUM('active', 'inactive'),
-    defaultValue: 'active',
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
   },
-  last_login: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
+  lastLogin: {
+    type: Date
+  }
 }, {
-  tableName: 'users',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
-  hooks: {
-    beforeCreate: async (user) => {
-      if (user.password) {
-        user.password = await bcrypt.hash(user.password, 10);
-      }
-    },
-    beforeUpdate: async (user) => {
-      if (user.changed('password')) {
-        user.password = await bcrypt.hash(user.password, 10);
-      }
-    },
-  },
+  timestamps: true
 });
 
-// Instance methods
-User.prototype.comparePassword = async function (candidatePassword) {
+// Indexes (email is already indexed via unique: true)
+userSchema.index({ role: 1, status: 1 });
+
+// Hash password before saving
+userSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Compare password method
+userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-User.prototype.toJSON = function () {
-  const values = Object.assign({}, this.get());
-  delete values.password;
-  return values;
+// Hide password in JSON responses
+userSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
 };
 
-module.exports = User;
+module.exports = mongoose.model('User', userSchema);

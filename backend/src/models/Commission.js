@@ -1,62 +1,60 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Commission = sequelize.define('Commission', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const commissionSchema = new mongoose.Schema({
+  applicationId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Application',
+    required: true
   },
-  application_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'applications', key: 'id' },
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent',
+    required: true
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'agents', key: 'id' },
+  commissionRuleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'CommissionRule'
   },
-  commission_rule_id: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'commission_rules', key: 'id' },
+
+  // Denormalized fields
+  agentName: String,
+  studentName: String,
+  courseName: String,
+
+  commission: {
+    type: {
+      type: String,
+      enum: ['percentage', 'fixed'],
+      required: true
+    },
+    value: {
+      type: Number,
+      required: true
+    }
   },
-  base_amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-    comment: 'Tuition fee or base amount',
+
+  calculatedAmount: {
+    type: Number,
+    required: true
   },
-  commission_amount: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
-  commission_type: {
-    type: DataTypes.ENUM('percentage', 'flat'),
-    allowNull: false,
-  },
-  commission_value: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: false,
-  },
+
   status: {
-    type: DataTypes.ENUM('pending', 'approved', 'paid'),
-    defaultValue: 'pending',
+    type: String,
+    enum: ['pending', 'approved', 'rejected', 'paid'],
+    default: 'pending'
   },
-  approved_by: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: { model: 'users', key: 'id' },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  approved_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
+  approvedAt: Date,
+  notes: String
 }, {
-  tableName: 'commissions',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = Commission;
+// Indexes
+commissionSchema.index({ applicationId: 1 }, { unique: true });
+commissionSchema.index({ agentId: 1, status: 1 });
+
+module.exports = mongoose.model('Commission', commissionSchema);

@@ -8,22 +8,27 @@ class AuditService {
   static async log(data) {
     try {
       const auditLog = await AuditLog.create({
-        user_id: data.userId || null,
-        role: data.role || null,
+        userId: data.userId || null,
+        userName: data.userName || null,
+        userRole: data.userRole || null,
+        agentId: data.agentId || null,
+        agentName: data.agentName || null,
         action: data.action,
-        entity: data.entity,
-        entity_id: data.entityId || null,
-        old_value: data.oldValue || null,
-        new_value: data.newValue || null,
-        ip_address: data.ipAddress || null,
-        user_agent: data.userAgent || null,
+        entityType: data.entityType,
+        entityId: data.entityId || null,
+        oldValues: data.oldValues || null,
+        newValues: data.newValues || null,
+        ipAddress: data.ipAddress || null,
+        userAgent: data.userAgent || null,
+        description: data.description || null,
       });
 
       logger.info('Audit log created', {
-        auditId: auditLog.id,
+        auditId: auditLog._id,
         userId: data.userId,
+        agentId: data.agentId,
         action: data.action,
-        entity: data.entity,
+        entityType: data.entityType,
       });
 
       return auditLog;
@@ -34,46 +39,67 @@ class AuditService {
   }
 
   /**
-   * Log user login
+   * Log user login (Admin/Agent)
    */
-  static async logLogin(user, req) {
-    return this.log({
-      userId: user.id,
-      role: user.role,
+  static async logLogin(user, req, userType = 'User') {
+    const data = {
       action: 'LOGIN',
-      entity: 'User',
-      entityId: user.id,
+      entityType: userType,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-    });
+    };
+
+    if (userType === 'Agent') {
+      data.agentId = user._id || user.id;
+      data.agentName = user.name || `${user.firstName} ${user.lastName}`;
+      data.userRole = 'AGENT';
+    } else {
+      data.userId = user._id || user.id;
+      data.userName = user.name;
+      data.userRole = user.role;
+    }
+    data.entityId = user._id || user.id;
+
+    return this.log(data);
   }
 
   /**
    * Log user logout
    */
-  static async logLogout(user, req) {
-    return this.log({
-      userId: user.id,
-      role: user.role,
+  static async logLogout(user, req, userType = 'User') {
+    const data = {
       action: 'LOGOUT',
-      entity: 'User',
-      entityId: user.id,
+      entityType: userType,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
-    });
+    };
+
+    if (userType === 'Agent') {
+      data.agentId = user._id || user.id;
+      data.agentName = user.name || `${user.firstName} ${user.lastName}`;
+      data.userRole = 'AGENT';
+    } else {
+      data.userId = user._id || user.id;
+      data.userName = user.name;
+      data.userRole = user.role;
+    }
+    data.entityId = user._id || user.id;
+
+    return this.log(data);
   }
 
   /**
    * Log create action
    */
-  static async logCreate(user, entity, entityId, newValue, req) {
+  static async logCreate(user, entityType, entityId, newValues, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'CREATE',
-      entity,
+      entityType,
       entityId,
-      newValue,
+      newValues,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -82,15 +108,16 @@ class AuditService {
   /**
    * Log update action
    */
-  static async logUpdate(user, entity, entityId, oldValue, newValue, req) {
+  static async logUpdate(user, entityType, entityId, oldValues, newValues, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'UPDATE',
-      entity,
+      entityType,
       entityId,
-      oldValue,
-      newValue,
+      oldValues,
+      newValues,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -99,14 +126,15 @@ class AuditService {
   /**
    * Log delete action
    */
-  static async logDelete(user, entity, entityId, oldValue, req) {
+  static async logDelete(user, entityType, entityId, oldValues, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'DELETE',
-      entity,
+      entityType,
       entityId,
-      oldValue,
+      oldValues,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -115,14 +143,15 @@ class AuditService {
   /**
    * Log approval action
    */
-  static async logApprove(user, entity, entityId, details, req) {
+  static async logApprove(user, entityType, entityId, details, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'APPROVE',
-      entity,
+      entityType,
       entityId,
-      newValue: details,
+      newValues: details,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -131,14 +160,15 @@ class AuditService {
   /**
    * Log rejection action
    */
-  static async logReject(user, entity, entityId, details, req) {
+  static async logReject(user, entityType, entityId, details, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'REJECT',
-      entity,
+      entityType,
       entityId,
-      newValue: details,
+      newValues: details,
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });
@@ -147,15 +177,16 @@ class AuditService {
   /**
    * Log status change
    */
-  static async logStatusChange(user, entity, entityId, oldStatus, newStatus, req) {
+  static async logStatusChange(user, entityType, entityId, oldStatus, newStatus, req) {
     return this.log({
-      userId: user.id,
-      role: user.role,
+      userId: user._id || user.id,
+      userName: user.name,
+      userRole: user.role,
       action: 'STATUS_CHANGE',
-      entity,
+      entityType,
       entityId,
-      oldValue: { status: oldStatus },
-      newValue: { status: newStatus },
+      oldValues: { status: oldStatus },
+      newValues: { status: newStatus },
       ipAddress: req.ip,
       userAgent: req.get('user-agent'),
     });

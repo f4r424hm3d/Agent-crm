@@ -1,70 +1,86 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
 
-const Application = sequelize.define('Application', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+// Sub-schema for status history (embedded)
+const statusHistorySchema = new mongoose.Schema({
+  oldStatus: String,
+  newStatus: {
+    type: String,
+    required: true
   },
-  application_number: {
-    type: DataTypes.STRING(50),
-    allowNull: false,
-    unique: true,
+  changedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  student_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'students', key: 'id' },
+  changedByName: String, // Denormalized
+  notes: String,
+  changedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: true });
+
+const applicationSchema = new mongoose.Schema({
+  // References
+  studentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Student',
+    required: true
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'agents', key: 'id' },
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent',
+    required: true
   },
-  university_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'universities', key: 'id' },
+  universityId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'University',
+    required: true
   },
-  course_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'courses', key: 'id' },
+  courseId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Course',
+    required: true
   },
-  status: {
-    type: DataTypes.ENUM('draft', 'submitted', 'under_review', 'offer_issued', 'offer_accepted', 'fee_paid', 'en rolled', 'rejected'),
-    defaultValue: 'draft',
+
+  // Denormalized fields for performance
+  studentName: String,
+  studentEmail: String,
+  agentName: String,
+  universityName: String,
+  courseName: String,
+
+  // Status
+  applicationStatus: {
+    type: String,
+    enum: [
+      'submitted',
+      'documents_verified',
+      'university_applied',
+      'offer_received',
+      'accepted',
+      'visa_applied',
+      'enrolled',
+      'commission_eligible',
+      'paid',
+      'rejected'
+    ],
+    default: 'submitted'
   },
-  intake_date: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
-  submitted_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  enrolled_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  rejected_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
-  rejection_reason: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  notes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
+  source: String,
+  notes: String,
+
+  // Embedded status history
+  statusHistory: [statusHistorySchema]
 }, {
-  tableName: 'applications',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: true
 });
 
-module.exports = Application;
+// Indexes
+applicationSchema.index({ studentId: 1 });
+applicationSchema.index({ agentId: 1 });
+applicationSchema.index({ universityId: 1 });
+applicationSchema.index({ courseId: 1 });
+applicationSchema.index({ applicationStatus: 1 });
+applicationSchema.index({ createdAt: -1 });
+
+module.exports = mongoose.model('Application', applicationSchema);

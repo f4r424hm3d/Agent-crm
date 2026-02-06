@@ -1,69 +1,199 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
-const Student = sequelize.define('Student', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+// Sub-schema for embedded documents
+const studentDocumentSchema = new mongoose.Schema({
+  documentType: {
+    type: String,
+    required: true
   },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    unique: true,
-    references: { model: 'users', key: 'id' },
-    onDelete: 'CASCADE',
+  documentName: {
+    type: String,
+    required: true
   },
-  agent_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: { model: 'agents', key: 'id' },
+  documentUrl: {
+    type: String,
+    required: true
   },
-  date_of_birth: {
-    type: DataTypes.DATEONLY,
-    allowNull: true,
+  verified: {
+    type: Boolean,
+    default: false
   },
-  gender: {
-    type: DataTypes.ENUM('Male', 'Female', 'Other'),
-    allowNull: true,
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  nationality: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  passport_number: {
-    type: DataTypes.STRING(50),
-    allowNull: true,
-  },
-  passport_expiry: {
-    type: DataTypes.DATEONLY,
-    allowNull: true,
-  },
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: true,
-  },
-  city: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  country: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
-  postal_code: {
-    type: DataTypes.STRING(20),
-    allowNull: true,
-  },
-  academic_level: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
-  },
+  verifiedAt: Date
 }, {
-  tableName: 'students',
-  timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  timestamps: { createdAt: true, updatedAt: false }
 });
 
-module.exports = Student;
+const studentSchema = new mongoose.Schema({
+  // Authentication
+  email: {
+    type: String,
+    required: true,
+    lowercase: true,
+    trim: true
+    // unique constraint removed - handled by compound index with isCompleted
+  },
+  password: {
+    type: String,
+    required: false // Not required for drafts
+  },
+
+  // Email Verification
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerifiedAt: Date,
+
+  // Personal details
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  phone: String,
+  countryCode: String, // Phone country code
+  fatherName: String,
+  motherName: String,
+  dateOfBirth: Date,
+  firstLanguage: String,
+  gender: {
+    type: String,
+    enum: ['Male', 'Female', 'Other']
+  },
+  nationality: String,
+  passportNumber: String,
+  passportExpiry: Date,
+  maritalStatus: {
+    type: String,
+    enum: ['Single', 'Married', 'Divorced'],
+    default: 'Single'
+  },
+
+  // Address
+  address: String,
+  city: String,
+  state: String,
+  country: String,
+  postalCode: String,
+
+  // Academic & Education
+  academicLevel: String,
+  educationCountry: String,
+  highestLevel: String,
+  gradingScheme: String,
+  gradeAverage: String,
+
+  // Test Scores
+  examType: String,
+  examDate: Date,
+  listeningScore: String,
+  readingScore: String,
+  writingScore: String,
+  speakingScore: String,
+  overallScore: String,
+
+  // Background
+  visaRefusal: String,
+  studyPermit: String,
+  backgroundDetails: String,
+
+  // Agent reference
+  agentId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Agent'
+  },
+
+  // Referral tracking - who referred this student
+  referredBy: {
+    type: String, // Can be user ID, agent ID, or admin ID
+    default: null
+  },
+
+  // Draft/Resume tracking
+  tempStudentId: {
+    type: String,
+    unique: true,
+    sparse: true, // Allows null values without uniqueness constraint
+    index: true
+  },
+  currentStep: {
+    type: Number,
+    default: 1,
+    min: 1,
+    max: 4
+  },
+  isCompleted: {
+    type: Boolean,
+    default: false,
+    index: true
+  },
+  isDraft: {
+    type: Boolean,
+    default: true,
+    index: true
+  },
+  lastSavedStep: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 4
+  },
+
+  // Embedded documents array
+  documents: [studentDocumentSchema],
+
+  // Status
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active'
+  },
+  lastLogin: Date
+}, {
+  timestamps: true
+});
+
+// Compound index for email uniqueness (only for completed students)
+studentSchema.index({ email: 1, isCompleted: 1 }, { unique: true });
+
+// Other indexes
+studentSchema.index({ agentId: 1, status: 1 });
+studentSchema.index({ passportNumber: 1 });
+studentSchema.index({ isDraft: 1, createdAt: 1 }); // For cleanup jobs
+studentSchema.index({ tempStudentId: 1 }, { unique: true, sparse: true });
+
+// Hash password before saving
+studentSchema.pre('save', async function () {
+  if (!this.isModified('password')) return;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Compare password method
+studentSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Hide password in JSON responses
+studentSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
+module.exports = mongoose.model('Student', studentSchema);

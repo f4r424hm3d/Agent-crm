@@ -14,7 +14,6 @@ const CommissionService = require('../services/commissionService');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
 const { APPLICATION_STATUS, COMMISSION_STATUS } = require('../utils/constants');
-const { Op } = require('sequelize');
 
 class ApplicationController {
   /**

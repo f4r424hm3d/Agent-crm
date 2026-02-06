@@ -29,6 +29,13 @@ class ResponseHandler {
   }
 
   /**
+   * Bad Request response (400)
+   */
+  static badRequest(res, message = 'Bad request', errors = null) {
+    return this.error(res, message, errors, 400);
+  }
+
+  /**
    * Created response (201)
    */
   static created(res, message, data = null) {
@@ -93,8 +100,8 @@ class ResponseHandler {
       pagination: {
         page: pagination.page || 1,
         limit: pagination.limit || 10,
-        totalItems: pagination.totalItems || 0,
-        totalPages: Math.ceil((pagination.totalItems || 0) / (pagination.limit || 10)),
+        total: pagination.totalItems || pagination.total || 0,
+        totalPages: Math.ceil((pagination.totalItems || pagination.total || 0) / (pagination.limit || 10)),
       },
     };
     return res.status(200).json(response);

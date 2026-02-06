@@ -1,66 +1,205 @@
-const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/database');
+const mongoose = require('mongoose');
+const bcrypt = require('bcrypt');
 
-const Agent = sequelize.define('Agent', {
-  id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true,
+const agentSchema = new mongoose.Schema({
+  // Authentication
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true
   },
-  user_id: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
-    onDelete: 'CASCADE',
+  password: {
+    type: String,
+    required: true
   },
-  company_name: {
-    type: DataTypes.STRING(200),
-    allowNull: false,
+
+  // Personal Information
+  firstName: {
+    type: String,
+    required: true,
+    trim: true
   },
+  lastName: {
+    type: String,
+    required: true,
+    trim: true
+  },
+  phone: {
+    type: String,
+    required: true
+  },
+  alternatePhone: String,
+  designation: String,
+  experience: String,
+  qualification: String,
+
+  // Company Information
+  companyName: {
+    type: String,
+    required: true
+  },
+  companyType: {
+    type: String,
+    required: true
+  },
+  registrationNumber: String,
+  establishedYear: {
+    type: Number,
+    required: true
+  },
+  website: String,
+  address: String,
+  city: String,
+  state: String,
+  pincode: String,
   country: {
-    type: DataTypes.STRING(100),
-    allowNull: false,
+    type: String,
+    default: 'India'
   },
-  city: {
-    type: DataTypes.STRING(100),
-    allowNull: true,
+
+  // Specialization & Services
+  specialization: [{
+    type: String
+  }],
+  servicesOffered: [{
+    type: String
+  }],
+
+  // Business Metrics
+  currentStudents: String,
+  teamSize: String,
+  annualRevenue: String,
+
+  // Partnership Details
+  partnershipType: String,
+  expectedStudents: String,
+  marketingBudget: String,
+  whyPartner: String,
+  references: String,
+  additionalInfo: String,
+
+  // Consent & Terms
+  termsAccepted: {
+    type: Boolean,
+    default: false
   },
-  address: {
-    type: DataTypes.TEXT,
-    allowNull: true,
+  dataConsent: {
+    type: Boolean,
+    default: false
   },
-  approval_status: {
-    type: DataTypes.ENUM('pending', 'approved', 'rejected'),
-    defaultValue: 'pending',
+  termsAcceptedAt: Date,
+  dataConsentAt: Date,
+
+  // Status fields
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'inactive'
   },
-  approval_notes: {
-    type: DataTypes.TEXT,
-    allowNull: true,
+  approvalStatus: {
+    type: String,
+    enum: ['pending', 'approved', 'declined'],
+    default: 'pending'
   },
-  approved_by: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    references: {
-      model: 'users',
-      key: 'id',
-    },
+  approvalReason: String,
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
   },
-  approved_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
+  approvedAt: Date,
+  declinedAt: Date,
+  lastLogin: Date,
+
+  // Tracking Fields
+  ipAddress: String,
+  browser: String,
+  os: String,
+
+  // Password Management
+  isPasswordSet: {
+    type: Boolean,
+    default: false
   },
-  rejected_at: {
-    type: DataTypes.DATE,
-    allowNull: true,
-  },
+  passwordSetupToken: String,
+  passwordSetupExpires: Date,
+  passwordResetOTP: String,
+  passwordResetOTPExpires: Date,
+  passwordResetToken: String,
+  passwordResetExpires: Date,
+
+  // Documents
+  documents: [
+    {
+      documentType: {
+        type: String,
+        required: true
+      },
+      url: {
+        type: String,
+        required: true
+      },
+      uploadedAt: {
+        type: Date,
+        default: Date.now
+      }
+    }
+  ],
+
+  // Stats (denormalized)
+  stats: {
+    totalStudents: { type: Number, default: 0 },
+    totalApplications: { type: Number, default: 0 },
+    totalCommissions: { type: Number, default: 0 },
+    lifetimeEarnings: { type: Number, default: 0 }
+  }
 }, {
-  tableName: 'agents',
   timestamps: true,
-  createdAt: 'created_at',
-  updatedAt: 'updated_at',
+  toJSON: { virtuals: true, getters: true },
+  toObject: { virtuals: true, getters: true }
 });
 
-module.exports = Agent;
+// Indexes (email is already indexed via unique: true)
+agentSchema.index({ approvalStatus: 1, status: 1 });
+agentSchema.index({ country: 1, city: 1 });
+
+// Hash password before saving
+agentSchema.pre('save', async function () {
+  // Handle password
+  if (!this.isModified('password')) return;
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+
+    // Set consent timestamps
+    if (this.isModified('termsAccepted') && this.termsAccepted && !this.termsAcceptedAt) {
+      this.termsAcceptedAt = new Date();
+    }
+    if (this.isModified('dataConsent') && this.dataConsent && !this.dataConsentAt) {
+      this.dataConsentAt = new Date();
+    }
+  } catch (error) {
+    throw error;
+  }
+});
+
+// Compare password method
+agentSchema.methods.comparePassword = async function (candidatePassword) {
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// Hide password in JSON responses
+agentSchema.methods.toJSON = function () {
+  const obj = this.toObject();
+  delete obj.password;
+  return obj;
+};
+
+// Virtual for full name
+agentSchema.virtual('fullName').get(function () {
+  return `${this.firstName} ${this.lastName}`;
+});
+
+module.exports = mongoose.model('Agent', agentSchema);

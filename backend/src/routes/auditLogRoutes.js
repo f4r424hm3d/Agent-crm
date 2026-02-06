@@ -15,4 +15,11 @@ router.get(
   AuditLogController.getEntityLogs
 );
 
+router.delete(
+  '/clear',
+  authMiddleware,
+  roleMiddleware(roles.SUPER_ADMIN_ONLY),
+  AuditLogController.clearAllLogs
+);
+
 module.exports = router;

@@ -36,6 +36,25 @@ router.get('/pending', authMiddleware, roleMiddleware(roles.ALL_ADMINS), AgentCo
 router.get('/:id', authMiddleware, AgentController.getAgentById);
 
 /**
+ * @route   POST /api/agents
+ * @desc    Create new agent
+ * @access  Private (Admin, Super Admin)
+ */
+router.post(
+  '/',
+  authMiddleware,
+  roleMiddleware(roles.ALL_ADMINS),
+  [
+    body('firstName').trim().notEmpty().withMessage('First Name is required'),
+    body('lastName').trim().notEmpty().withMessage('Last Name is required'),
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('companyName').trim().notEmpty().withMessage('Company name is required'),
+  ],
+  validateRequest,
+  AgentController.createAgent
+);
+
+/**
  * @route   PUT /api/agents/:id/approve
  * @desc    Approve agent
  * @access  Private (Admin, Super Admin)
@@ -78,6 +97,30 @@ router.put(
   ],
   validateRequest,
   AgentController.updateBankDetails
+);
+
+/**
+ * @route   PUT /api/agents/:id
+ * @desc    Update agent
+ * @access  Private (Super Admin)
+ */
+router.put(
+  '/:id',
+  authMiddleware,
+  roleMiddleware(roles.ALL_ADMINS),
+  AgentController.updateAgent
+);
+
+/**
+ * @route   DELETE /api/agents/:id
+ * @desc    Delete agent
+ * @access  Private (Super Admin)
+ */
+router.delete(
+  '/:id',
+  authMiddleware,
+  roleMiddleware(roles.ALL_ADMINS),
+  AgentController.deleteAgent
 );
 
 module.exports = router;

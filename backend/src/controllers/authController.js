@@ -8,7 +8,7 @@ const { USER_ROLES, AGENT_APPROVAL_STATUS } = require('../utils/constants');
 
 class AuthController {
   /**
-   * Login
+   * Login (Admin/Super Admin/Student only)
    * POST /api/auth/login
    */
   static async login(req, res) {
@@ -16,22 +16,9 @@ class AuthController {
       const { email, password, role } = req.body;
       console.log(`Login attempt for: ${email}, requested role: ${role}`); // DEBUG LOG
 
-      // Find user
-      const user = await User.findOne({
-        where: { email },
-        include: [
-          {
-            model: Agent,
-            as: 'agent',
-            required: false,
-          },
-          {
-            model: Student,
-            as: 'student',
-            required: false,
-          },
-        ],
-      });
+      // Find user (Admin/Super Admin only)
+      const user = await User.findOne({ email });
+
 
       if (!user) {
         console.log('User not found in DB'); // DEBUG LOG
@@ -60,20 +47,10 @@ class AuthController {
         return ResponseHandler.forbidden(res, 'Account is inactive');
       }
 
-      // Check agent approval status
-      if (user.role === USER_ROLES.AGENT && user.agent) {
-        if (user.agent.approval_status !== AGENT_APPROVAL_STATUS.APPROVED) {
-          return ResponseHandler.forbidden(
-            res,
-            `Agent account is ${user.agent.approval_status}. Please wait for admin approval.`
-          );
-        }
-      }
-
       // Generate JWT token
       const token = jwt.sign(
         {
-          id: user.id,
+          id: user._id,
           email: user.email,
           role: user.role,
         },
@@ -82,7 +59,8 @@ class AuthController {
       );
 
       // Update last login
-      await user.update({ last_login: new Date() });
+      user.lastLogin = new Date();
+      await user.save();
 
       // Log audit
       await AuditService.logLogin(user, req);
@@ -92,7 +70,7 @@ class AuthController {
       return ResponseHandler.success(res, 'Login successful', {
         token,
         user: {
-          id: user.id,
+          id: user._id,
           name: user.name,
           email: user.email,
           role: user.role,
@@ -107,52 +85,149 @@ class AuthController {
   }
 
   /**
+   * Agent Login (separate from users)
+   * POST /api/auth/agent-login
+   */
+  static async agentLogin(req, res) {
+    try {
+      const { email, password } = req.body;
+      console.log(`Agent login attempt for: ${email}`);
+
+      // Find agent by email
+      const agent = await Agent.findOne({ email });
+
+      if (!agent) {
+        console.log('Agent not found in DB');
+        return ResponseHandler.unauthorized(res, 'Invalid credentials');
+      }
+      console.log(`Agent found: ${agent.email}, Approval: ${agent.approvalStatus}`);
+
+      // Check password
+      const isPasswordValid = await agent.comparePassword(password);
+      if (!isPasswordValid) {
+        console.log('Password invalid');
+        return ResponseHandler.unauthorized(res, 'Invalid credentials');
+      }
+
+      // Check if agent is active
+      if (agent.status !== 'active') {
+        return ResponseHandler.forbidden(res, 'Account is inactive');
+      }
+
+      // Check agent approval status
+      if (agent.approvalStatus !== AGENT_APPROVAL_STATUS.APPROVED) {
+        return ResponseHandler.forbidden(
+          res,
+          `Agent account is ${agent.approvalStatus}. Please wait for admin approval.`
+        );
+      }
+
+      // Generate JWT token
+      const token = jwt.sign(
+        {
+          id: agent._id,
+          email: agent.email,
+          role: 'AGENT', // Fixed role
+        },
+        process.env.JWT_SECRET,
+        { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+      );
+
+      // Update last login
+      agent.lastLogin = new Date();
+      await agent.save();
+
+      // Log audit
+      await AuditService.logLogin(agent, req, 'Agent');
+
+      logger.info('Agent logged in', { agentId: agent.id, email: agent.email });
+
+      return ResponseHandler.success(res, 'Login successful', {
+        token,
+        user: {
+          id: agent.id,
+          name: agent.name,
+          email: agent.email,
+          role: 'AGENT',
+          phone: agent.phone,
+          status: agent.status,
+          company_name: agent.company_name,
+          approvalStatus: agent.approvalStatus,
+        },
+      });
+    } catch (error) {
+      logger.error('Agent login error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Login failed', error);
+    }
+  }
+
+  /**
    * Register Agent
    * POST /api/auth/register-agent
    */
   static async registerAgent(req, res) {
     try {
-      const { name, email, phone, password, company_name, country, city, address } = req.body;
-
-      // Check if email exists
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
-        return ResponseHandler.error(res, 'Email already exists');
-      }
-
-      // Create user
-      const user = await User.create({
+      const {
         name,
         email,
         phone,
         password,
-        role: USER_ROLES.AGENT,
-        status: 'active',
-      });
-
-      // Create agent profile
-      const agent = await Agent.create({
-        user_id: user.id,
         company_name,
+        company_address,
+        contact_person,
         country,
         city,
-        address,
-        approval_status: AGENT_APPROVAL_STATUS.PENDING,
+        years_of_experience,
+        description,
+        bank_name,
+        account_number,
+        account_holder_name,
+        ifsc_code,
+        swift_code,
+      } = req.body;
+
+      // Check if email exists in agents table
+      const existingAgent = await Agent.findOne({ email });
+      if (existingAgent) {
+        return ResponseHandler.error(res, 'Email already exists', 400);
+      }
+
+      // Create agent (self-contained)
+      const agent = await Agent.create({
+        name,
+        email,
+        phone,
+        password,
+        company_name,
+        company_address,
+        contact_person,
+        country,
+        city,
+        years_of_experience,
+        description,
+        bank_name,
+        account_number,
+        account_holder_name,
+        ifsc_code,
+        swift_code,
+        status: 'inactive',
+        approvalStatus: AGENT_APPROVAL_STATUS.PENDING,
       });
 
       // Send registration email
-      await emailService.sendAgentRegistrationEmail(agent, user);
+      await emailService.sendAgentRegistrationEmail(agent);
 
-      // Log audit
-      await AuditService.logCreate(user, 'Agent', agent.id, { email, company_name }, req);
+      logger.info('Agent registered', { agentId: agent.id, email: agent.email });
 
-      logger.info('Agent registered', { userId: user.id, agentId: agent.id });
-
-      return ResponseHandler.created(res, 'Agent registration successful. Please wait for admin approval.', {
-        userId: user.id,
-        agentId: agent.id,
-        approval_status: agent.approval_status,
-      });
+      return ResponseHandler.created(
+        res,
+        'Agent registration successful. Please wait for admin approval.',
+        {
+          agentId: agent.id,
+          email: agent.email,
+          approvalStatus: agent.approvalStatus,
+        }
+      );
     } catch (error) {
       logger.error('Agent registration error', { error: error.message });
       return ResponseHandler.serverError(res, 'Registration failed', error);
@@ -167,39 +242,33 @@ class AuthController {
     try {
       const { name, email, phone, password, agent_id, date_of_birth, nationality, passport_number } = req.body;
 
-      // Check if email exists
-      const existingUser = await User.findOne({ where: { email } });
-      if (existingUser) {
-        return ResponseHandler.error(res, 'Email already exists');
+      // Check if email exists in students table
+      const existingStudent = await Student.findOne({ email });
+      if (existingStudent) {
+        return ResponseHandler.error(res, 'Email already exists', 400);
       }
 
-      // Create user
-      const user = await User.create({
+      // Create student (self-contained)
+      const student = await Student.create({
         name,
         email,
         phone,
         password,
-        role: USER_ROLES.STUDENT,
-        status: 'active',
-      });
-
-      // Create student profile
-      const student = await Student.create({
-        user_id: user.id,
         agent_id: agent_id || null,
         date_of_birth,
         nationality,
         passport_number,
+        status: 'active',
       });
 
-      logger.info('Student registered', { userId: user.id, studentId: student.id });
+      logger.info('Student registered', { studentId: student.id, email: student.email });
 
       // Generate token for auto-login
       const token = jwt.sign(
         {
-          id: user.id,
-          email: user.email,
-          role: user.role,
+          id: student.id,
+          email: student.email,
+          role: 'STUDENT',
         },
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
@@ -208,10 +277,12 @@ class AuthController {
       return ResponseHandler.created(res, 'Student registration successful', {
         token,
         user: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role,
+          id: student.id,
+          name: student.name,
+          email: student.email,
+          role: 'STUDENT',
+          phone: student.phone,
+          status: student.status,
         },
       });
     } catch (error) {
@@ -221,34 +292,21 @@ class AuthController {
   }
 
   /**
-   * Get current user
+   * Get current user profile
    * GET /api/auth/me
    */
   static async getMe(req, res) {
     try {
-      const user = await User.findByPk(req.userId, {
-        include: [
-          {
-            model: Agent,
-            as: 'agent',
-            required: false,
-          },
-          {
-            model: Student,
-            as: 'student',
-            required: false,
-          },
-        ],
-      });
+      const user = await User.findById(req.userId).select('-password');
 
       if (!user) {
         return ResponseHandler.notFound(res, 'User not found');
       }
 
-      return ResponseHandler.success(res, 'User retrieved successfully', { user });
+      return ResponseHandler.success(res, 'Profile retrieved successfully', { user });
     } catch (error) {
       logger.error('Get me error', { error: error.message });
-      return ResponseHandler.serverError(res, 'Failed to get user', error);
+      return ResponseHandler.serverError(res, 'Failed to get profile', error);
     }
   }
 
@@ -267,6 +325,294 @@ class AuthController {
     } catch (error) {
       logger.error('Logout error', { error: error.message });
       return ResponseHandler.serverError(res, 'Logout failed', error);
+    }
+  }
+
+  /**
+   * Setup Password (First-time)
+   * POST /api/auth/setup-password
+   */
+  static async setupPassword(req, res) {
+    try {
+      const { token, password, confirmPassword } = req.body;
+
+      // Validate inputs
+      if (!token || !password || !confirmPassword) {
+        return ResponseHandler.badRequest(res, 'Token and password are required');
+      }
+
+      if (password !== confirmPassword) {
+        return ResponseHandler.badRequest(res, 'Passwords do not match');
+      }
+
+      // Validate password strength
+      const { validatePassword } = require('../utils/passwordValidator');
+      const validation = validatePassword(password);
+      if (!validation.isValid) {
+        return ResponseHandler.badRequest(res, validation.errors.join(', '));
+      }
+
+      // Find agent by token
+      const agent = await Agent.findOne({
+        passwordSetupToken: token,
+        passwordSetupExpires: { $gt: Date.now() }
+      });
+
+      if (!agent) {
+        return ResponseHandler.badRequest(res, 'Invalid or expired token');
+      }
+
+      // Check if password already set
+      if (agent.isPasswordSet) {
+        return ResponseHandler.badRequest(res, 'Password already set. Use forgot password to reset.');
+      }
+
+      // Set password (will be hashed by pre-save hook)
+      agent.password = password;
+      agent.isPasswordSet = true;
+      agent.passwordSetupToken = undefined;
+      agent.passwordSetupExpires = undefined;
+      agent.status = 'active';
+
+      await agent.save();
+
+      logger.info('Password setup completed', { agentId: agent._id, email: agent.email });
+
+      return ResponseHandler.success(res, 'Password set successfully. You can now login.');
+    } catch (error) {
+      logger.error('Setup password error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to setup password', error);
+    }
+  }
+
+  /**
+   * Forgot Password - Send OTP
+   * POST /api/auth/forgot-password
+   */
+  static async forgotPassword(req, res) {
+    try {
+      const { email } = req.body;
+
+      if (!email) {
+        return ResponseHandler.badRequest(res, 'Email is required');
+      }
+
+      // Find agent by email
+      const agent = await Agent.findOne({ email: email.toLowerCase() });
+
+      // Don't reveal if email exists
+      if (!agent) {
+        return ResponseHandler.success(res, 'If the email exists, an OTP has been sent');
+      }
+
+      // Check if password is set
+      if (!agent.isPasswordSet) {
+        // Password not set yet - resend setup link instead of OTP
+        const crypto = require('crypto');
+
+        // Generate new password setup token (expires in 24 hours)
+        const setupToken = crypto.randomBytes(32).toString('hex');
+        const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+        // Update agent with new token
+        agent.passwordSetupToken = setupToken;
+        agent.passwordSetupExpires = tokenExpires;
+        await agent.save();
+
+        // Send password setup email with retry mechanism
+        const maxRetries = 3;
+        let attempt = 0;
+        let emailSent = false;
+        let lastError = null;
+
+        while (attempt < maxRetries && !emailSent) {
+          attempt++;
+          try {
+            await emailService.sendPasswordSetupEmail(agent, setupToken);
+            emailSent = true;
+            logger.info('Password setup link resent (expired token case)', {
+              agentId: agent._id,
+              email: agent.email,
+              attempt
+            });
+          } catch (emailError) {
+            lastError = emailError;
+            logger.error(`Failed to send setup email - Attempt ${attempt}/${maxRetries}`, {
+              agentId: agent._id,
+              error: emailError.message
+            });
+
+            if (attempt < maxRetries) {
+              const waitTime = Math.pow(2, attempt) * 500;
+              await new Promise(resolve => setTimeout(resolve, waitTime));
+            }
+          }
+        }
+
+        if (!emailSent) {
+          logger.error('All setup email send attempts failed', {
+            agentId: agent._id,
+            error: lastError?.message
+          });
+          return ResponseHandler.serverError(res, 'Failed to send setup link. Please contact support.');
+        }
+
+        return ResponseHandler.success(res, 'Password setup link has been sent to your email (valid for 24 hours)');
+      }
+
+      // Generate OTP
+      const { generateOTP } = require('../utils/otpGenerator');
+      const otp = generateOTP();
+
+      // Save OTP with 10 minute expiry
+      agent.passwordResetOTP = otp;
+      agent.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+      await agent.save();
+
+      // Send OTP email with retry mechanism
+      const maxRetries = 3;
+      let attempt = 0;
+      let emailSent = false;
+      let lastError = null;
+
+      while (attempt < maxRetries && !emailSent) {
+        attempt++;
+        try {
+          await emailService.sendPasswordResetOTP(agent, otp);
+          emailSent = true;
+          logger.info('Password reset OTP sent', {
+            agentId: agent._id,
+            email: agent.email,
+            attempt
+          });
+        } catch (emailError) {
+          lastError = emailError;
+          logger.error(`Failed to send OTP email - Attempt ${attempt}/${maxRetries}`, {
+            agentId: agent._id,
+            error: emailError.message
+          });
+
+          // If not the last attempt, wait before retrying
+          if (attempt < maxRetries) {
+            const waitTime = Math.pow(2, attempt) * 500; // 1s, 2s, 4s
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
+      }
+
+      // If all retries failed, return error
+      if (!emailSent) {
+        logger.error('All OTP email send attempts failed', {
+          agentId: agent._id,
+          error: lastError?.message
+        });
+        return ResponseHandler.serverError(res, 'Failed to send OTP email. Please try again later.');
+      }
+
+      return ResponseHandler.success(res, 'OTP has been sent to your email');
+    } catch (error) {
+      logger.error('Forgot password error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to process request', error);
+    }
+  }
+
+  /**
+   * Verify OTP
+   * POST /api/auth/verify-otp
+   */
+  static async verifyOTP(req, res) {
+    try {
+      const { email, otp } = req.body;
+
+      if (!email || !otp) {
+        return ResponseHandler.badRequest(res, 'Email and OTP are required');
+      }
+
+      // Find agent
+      const agent = await Agent.findOne({
+        email: email.toLowerCase(),
+        passwordResetOTP: otp,
+        passwordResetOTPExpires: { $gt: Date.now() }
+      });
+
+      if (!agent) {
+        return ResponseHandler.badRequest(res, 'Invalid or expired OTP');
+      }
+
+      // Generate reset token (valid for 1 hour)
+      const { generateToken } = require('../utils/otpGenerator');
+      const resetToken = generateToken();
+
+      agent.passwordResetToken = resetToken;
+      agent.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+      agent.passwordResetOTP = undefined; // Clear OTP after verification
+      agent.passwordResetOTPExpires = undefined;
+
+      await agent.save();
+
+      logger.info('OTP verified successfully', { agentId: agent._id, email: agent.email });
+
+      return ResponseHandler.success(res, 'OTP verified successfully', { resetToken });
+    } catch (error) {
+      logger.error('Verify OTP error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to verify OTP', error);
+    }
+  }
+
+  /**
+   * Reset Password
+   * POST /api/auth/reset-password
+   */
+  static async resetPassword(req, res) {
+    try {
+      const { token, password, confirmPassword } = req.body;
+
+      if (!token || !password || !confirmPassword) {
+        return ResponseHandler.badRequest(res, 'Token and password are required');
+      }
+
+      if (password !== confirmPassword) {
+        return ResponseHandler.badRequest(res, 'Passwords do not match');
+      }
+
+      // Validate password strength
+      const { validatePassword } = require('../utils/passwordValidator');
+      const validation = validatePassword(password);
+      if (!validation.isValid) {
+        return ResponseHandler.badRequest(res, validation.errors.join(', '));
+      }
+
+      // Find agent by reset token
+      const agent = await Agent.findOne({
+        passwordResetToken: token,
+        passwordResetExpires: { $gt: Date.now() }
+      });
+
+      if (!agent) {
+        return ResponseHandler.badRequest(res, 'Invalid or expired reset token');
+      }
+
+      // Update password (will be hashed by pre-save hook)
+      agent.password = password;
+      agent.passwordResetToken = undefined;
+      agent.passwordResetExpires = undefined;
+
+      await agent.save();
+
+      // Send success email
+      try {
+        await emailService.sendPasswordResetSuccess(agent);
+      } catch (emailError) {
+        logger.error('Failed to send password reset success email', { error: emailError.message });
+        // Don't fail the request if email fails
+      }
+
+      logger.info('Password reset successful', { agentId: agent._id, email: agent.email });
+
+      return ResponseHandler.success(res, 'Password reset successfully. You can now login with your new password.');
+    } catch (error) {
+      logger.error('Reset password error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to reset password', error);
     }
   }
 }

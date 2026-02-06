@@ -2,7 +2,6 @@ const { University } = require('../models');
 const ResponseHandler = require('../utils/responseHandler');
 const AuditService = require('../services/auditService');
 const logger = require('../utils/logger');
-const { Op } = require('sequelize');
 
 class UniversityController {
   /**

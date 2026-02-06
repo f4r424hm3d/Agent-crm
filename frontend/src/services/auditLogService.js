@@ -21,6 +21,12 @@ export const auditLogService = {
   //   });
   //   return response.data;
   // },
+
+  // Clear all logs
+  clearLogs: async () => {
+    const response = await apiClient.delete('/audit-logs/clear');
+    return response.data;
+  },
 };
 
 export default auditLogService;

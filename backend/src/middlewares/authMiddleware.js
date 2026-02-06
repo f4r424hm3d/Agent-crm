@@ -16,10 +16,8 @@ const authMiddleware = async (req, res, next) => {
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Find user
-    const user = await User.findByPk(decoded.id, {
-      attributes: { exclude: ['password'] },
-    });
+    // Find user by ID (Mongoose)
+    const user = await User.findById(decoded.id).select('-password');
 
     if (!user) {
       return res.status(401).json({
@@ -37,7 +35,7 @@ const authMiddleware = async (req, res, next) => {
 
     // Attach user to request
     req.user = user;
-    req.userId = user.id;
+    req.userId = user._id;
     req.userRole = user.role;
 
     next();

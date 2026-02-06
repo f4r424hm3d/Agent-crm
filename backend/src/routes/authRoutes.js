@@ -20,7 +20,7 @@ const validateRequest = (req, res, next) => {
 
 /**
  * @route   POST /api/auth/login
- * @desc    User login
+ * @desc    User login (Admin/Super Admin/Student)
  * @access  Public
  */
 router.post(
@@ -31,6 +31,21 @@ router.post(
   ],
   validateRequest,
   AuthController.login
+);
+
+/**
+ * @route   POST /api/auth/agent-login
+ * @desc    Agent login (separate authentication)
+ * @access  Public
+ */
+router.post(
+  '/agent-login',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('password').notEmpty().withMessage('Password is required'),
+  ],
+  validateRequest,
+  AuthController.agentLogin
 );
 
 /**
@@ -81,5 +96,66 @@ router.get('/me', authMiddleware, AuthController.getMe);
  * @access  Private
  */
 router.post('/logout', authMiddleware, AuthController.logout);
+
+/**
+ * @route   POST /api/auth/setup-password
+ * @desc    Setup password (first-time)
+ * @access  Public
+ */
+router.post(
+  '/setup-password',
+  [
+    body('token').notEmpty().withMessage('Token is required'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('confirmPassword').notEmpty().withMessage('Confirm password is required'),
+  ],
+  validateRequest,
+  AuthController.setupPassword
+);
+
+/**
+ * @route   POST /api/auth/forgot-password
+ * @desc    Request password reset OTP
+ * @access  Public
+ */
+router.post(
+  '/forgot-password',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+  ],
+  validateRequest,
+  AuthController.forgotPassword
+);
+
+/**
+ * @route   POST /api/auth/verify-otp
+ * @desc    Verify OTP and get reset token
+ * @access  Public
+ */
+router.post(
+  '/verify-otp',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('otp').isLength({ min: 6, max: 6 }).withMessage('OTP must be 6 digits'),
+  ],
+  validateRequest,
+  AuthController.verifyOTP
+);
+
+/**
+ * @route   POST /api/auth/reset-password
+ * @desc    Reset password with token
+ * @access  Public
+ */
+router.post(
+  '/reset-password',
+  [
+    body('token').notEmpty().withMessage('Token is required'),
+    body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
+    body('confirmPassword').notEmpty().withMessage('Confirm password is required'),
+  ],
+  validateRequest,
+  AuthController.resetPassword
+);
 
 module.exports = router;
