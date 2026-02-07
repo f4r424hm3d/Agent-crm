@@ -3,6 +3,16 @@ import { useSelector, useDispatch } from "react-redux";
 import { useNavigate } from "react-router-dom";
 import { FiMenu, FiBell, FiUser, FiLogOut, FiSettings } from "react-icons/fi";
 import { logout } from "../../store/slices/authSlice";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../components/ui/alert-dialog";
 
 const Navbar = ({ onMenuClick }) => {
   const dispatch = useDispatch();
@@ -10,6 +20,12 @@ const Navbar = ({ onMenuClick }) => {
   const { user } = useSelector((state) => state.auth);
   const [showDropdown, setShowDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(true);
+    setShowDropdown(false);
+  };
 
   const handleLogout = () => {
     dispatch(logout());
@@ -106,7 +122,7 @@ const Navbar = ({ onMenuClick }) => {
                 </button>
                 <hr className="my-2 border-gray-200" />
                 <button
-                  onClick={handleLogout}
+                  onClick={handleLogoutConfirm}
                   className="w-full flex items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100"
                 >
                   <FiLogOut className="mr-3" size={16} />
@@ -128,6 +144,27 @@ const Navbar = ({ onMenuClick }) => {
           }}
         ></div>
       )}
+
+      {/* Logout Confirmation AlertDialog */}
+      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to logout? You'll need to login again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+            >
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </nav>
   );
 };

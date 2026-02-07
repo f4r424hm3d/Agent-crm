@@ -111,6 +111,7 @@ app.use('/api/upload', require('./src/routes/uploadRoutes'));
 // Serve static files
 const path = require('path');
 app.use('/upload', express.static(path.join(__dirname, 'upload')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 404 handler
 app.use((req, res) => {

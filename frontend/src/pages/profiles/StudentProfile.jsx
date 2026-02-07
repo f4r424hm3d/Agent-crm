@@ -9,6 +9,119 @@ import authService from '../../services/authService';
  * Balanced Premium Design: Polished but not "excessive".
  * Maintains full-width sidebar card and reduced outer padding as requested.
  */
+
+// --- Helper Components (Must be outside to prevent re-creation) ---
+const Toggle = ({ checked, onChange, label, disabled }) => (
+    <div
+        onClick={() => !disabled && onChange(!checked)}
+        className={`flex items-center justify-between group cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+    >
+        <span className="text-xs font-black text-[#002855] group-hover:text-blue-600 transition-colors">{label}</span>
+        <button
+            type="button"
+            className={`relative inline-flex h-6 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-[#004a99]' : 'bg-gray-200'}`}
+        >
+            <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-6' : 'translate-x-0'}`}
+            />
+        </button>
+    </div>
+);
+
+const ScoreRankField = ({ label, score, rank, onScoreChange, onRankChange, isEditing, className = "" }) => (
+    <div className={`space-y-1 ${className}`}>
+        <span className="text-xs font-semibold text-gray-700 ml-1">{label}</span>
+        <div className="flex gap-2 w-full">
+            <input
+                type="text"
+                value={score || ''}
+                onChange={(e) => isEditing && onScoreChange(e.target.value)}
+                placeholder="Score"
+                disabled={!isEditing}
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+            <input
+                type="text"
+                value={rank || ''}
+                onChange={(e) => isEditing && onRankChange(e.target.value)}
+                placeholder="Rank"
+                disabled={!isEditing}
+                className="flex-1 min-w-0 bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
+            />
+        </div>
+    </div>
+);
+
+const SectionHeader = ({ title, icon: Icon, isEditing, onEdit, onSave, onCancel }) => (
+    <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+        <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+            <Icon className="text-blue-600 w-5 h-5" />
+            {title}
+        </h3>
+        {!isEditing ? (
+            <button onClick={onEdit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors">
+                Edit
+            </button>
+        ) : (
+            <div className="flex gap-2">
+                <button onClick={onCancel} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors">
+                    Cancel
+                </button>
+                <button onClick={onSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors">
+                    Save
+                </button>
+            </div>
+        )}
+    </div>
+);
+
+const DataField = ({ label, value, isEditing, onChange, type = "text", placeholder, options, icon: Icon, mono = false, disabled = false, maxHint }) => (
+    <div className="space-y-1">
+        <label className="text-xs font-semibold text-gray-700 ml-1">
+            {label}
+        </label>
+        {isEditing && !disabled ? (
+            options ? (
+                <select
+                    value={value || ''}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors"
+                >
+                    <option value="">Select {label}</option>
+                    {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+            ) : type === 'textarea' ? (
+                <div className="relative">
+                    <textarea
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={placeholder}
+                        rows={4}
+                        className={`w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors ${mono ? 'font-mono' : ''}`}
+                    />
+                    {maxHint && <span className="absolute right-3 bottom-3 text-xs text-gray-400">max {maxHint}</span>}
+                </div>
+            ) : (
+                <div className="relative">
+                    <input
+                        type={type}
+                        value={value || ''}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={placeholder}
+                        className={`w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-colors ${mono ? 'font-mono' : ''}`}
+                    />
+                    {maxHint && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">max {maxHint}</span>}
+                </div>
+            )
+        ) : (
+            <div className={`bg-gray-50 border border-gray-200 rounded-md px-3 py-2 text-sm text-gray-900 w-full flex items-center ${mono ? 'font-mono' : ''} ${disabled ? 'opacity-60' : ''} ${type === 'textarea' ? 'min-h-[100px] items-start whitespace-pre-wrap' : ''}`}>
+                {value || <span className="text-gray-400 italic">Not Provided</span>}
+            </div>
+        )}
+    </div>
+);
+
 const StudentProfile = () => {
     const navigate = useNavigate();
 
@@ -32,20 +145,6 @@ const StudentProfile = () => {
         background: false
     });
     const [editData, setEditData] = useState({});
-
-    // Change Password States
-    const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [isChangingPassword, setIsChangingPassword] = useState(false);
-    const [passwordForm, setPasswordForm] = useState({
-        oldPassword: '',
-        newPassword: '',
-        confirmPassword: ''
-    });
-    const [showPasswords, setShowPasswords] = useState({
-        old: false,
-        new: false,
-        confirm: false
-    });
 
     // --- Refs for Smooth Scrolling ---
     const profileRef = useRef(null);
@@ -157,143 +256,7 @@ const StudentProfile = () => {
         }
     };
 
-    // --- Password Handlers ---
-    const handlePasswordSubmit = async (e) => {
-        e.preventDefault();
-
-        if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-            setUploadError('New passwords do not match');
-            setTimeout(() => setUploadError(null), 3000);
-            return;
-        }
-
-        if (passwordForm.newPassword.length < 6) {
-            setUploadError('Password must be at least 6 characters');
-            setTimeout(() => setUploadError(null), 3000);
-            return;
-        }
-
-        try {
-            setIsChangingPassword(true);
-            const response = await authService.changePassword(
-                passwordForm.oldPassword,
-                passwordForm.newPassword
-            );
-
-            setUploadSuccess('Password changed successfully!');
-            setShowPasswordModal(false);
-            setPasswordForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
-            setTimeout(() => setUploadSuccess(false), 3000);
-        } catch (err) {
-            setUploadError(err.response?.data?.message || 'Failed to change password');
-            setTimeout(() => setUploadError(null), 3000);
-        } finally {
-            setIsChangingPassword(false);
-        }
-    };
-
     // --- Render Helpers ---
-    const Toggle = ({ checked, onChange, label, disabled }) => (
-        <div
-            onClick={() => !disabled && onChange(!checked)}
-            className={`flex items-center justify-between group cursor-pointer ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
-        >
-            <span className="text-xs font-black text-[#002855] group-hover:text-blue-600 transition-colors">{label}</span>
-            <button
-                type="button"
-                className={`relative inline-flex h-6 w-12 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${checked ? 'bg-[#004a99]' : 'bg-gray-200'}`}
-            >
-                <span
-                    aria-hidden="true"
-                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${checked ? 'translate-x-6' : 'translate-x-0'}`}
-                />
-            </button>
-        </div>
-    );
-
-    const ScoreRankField = ({ label, score, rank, onScoreChange, onRankChange, isEditing, className = "" }) => (
-        <div className={`space-y-1 ${className}`}>
-            <span className="text-[10px] font-black text-[#002855] ml-1">{label}</span>
-            <div className="flex gap-2 w-full">
-                <input
-                    type="text"
-                    value={score || ''}
-                    onChange={(e) => isEditing && onScoreChange(e.target.value)}
-                    placeholder="Score"
-                    disabled={!isEditing}
-                    className="flex-1 min-w-0 bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50"
-                />
-                <input
-                    type="text"
-                    value={rank || ''}
-                    onChange={(e) => isEditing && onRankChange(e.target.value)}
-                    placeholder="Rank"
-                    disabled={!isEditing}
-                    className="flex-1 min-w-0 bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50"
-                />
-            </div>
-        </div>
-    );
-
-    const SectionHeader = ({ title, icon: Icon, isEditing, onEdit, onSave, onCancel }) => (
-        <div className="bg-gray-50 px-8 py-5 border-b border-gray-100 flex items-center justify-between">
-            <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
-                <div className="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
-                    <Icon className="text-blue-600 w-5 h-5" />
-                </div>
-                {title}
-            </h3>
-            {!isEditing ? (
-                <button onClick={onEdit} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-black transition-all shadow-lg shadow-blue-100">
-                    Edit Section
-                </button>
-            ) : (
-                <div className="flex gap-3">
-                    <button onClick={onCancel} className="px-6 py-2.5 bg-black text-white rounded-xl hover:bg-gray-800 text-sm font-black transition-all">
-                        Cancel
-                    </button>
-                    <button onClick={onSave} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 text-sm font-black transition-all shadow-lg shadow-blue-100">
-                        Save
-                    </button>
-                </div>
-            )}
-        </div>
-    );
-
-    const DataField = ({ label, value, isEditing, onChange, type = "text", placeholder, options, icon: Icon, mono = false, disabled = false, maxHint }) => (
-        <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">
-                {label}
-            </label>
-            {isEditing && !disabled ? (
-                options ? (
-                    <select
-                        value={value || ''}
-                        onChange={(e) => onChange(e.target.value)}
-                        className="w-full bg-white border-2 border-blue-50 rounded-2xl px-5 py-4 text-gray-900 font-bold focus:border-blue-600 outline-none transition-all shadow-sm"
-                    >
-                        <option value="">Select {label}</option>
-                        {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                    </select>
-                ) : (
-                    <div className="relative">
-                        <input
-                            type={type}
-                            value={value || ''}
-                            onChange={(e) => onChange(e.target.value)}
-                            placeholder={placeholder}
-                            className={`w-full bg-white border-2 border-blue-50 rounded-2xl px-5 py-4 text-gray-900 font-bold focus:border-blue-600 outline-none transition-all shadow-sm ${mono ? 'font-mono' : ''}`}
-                        />
-                        {maxHint && <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[8px] font-black text-gray-300 uppercase">max {maxHint}</span>}
-                    </div>
-                )
-            ) : (
-                <div className={`bg-gray-50 border border-gray-100 rounded-2xl px-5 py-4 text-gray-900 font-bold shadow-sm min-h-[58px] flex items-center ${mono ? 'font-mono' : ''} ${disabled ? 'opacity-60 grayscale' : ''}`}>
-                    {value || <span className="text-gray-300 italic font-medium">Not Provided</span>}
-                </div>
-            )}
-        </div>
-    );
 
     if (loading && !studentData) return (
         <div className="flex justify-center items-center min-h-screen bg-gray-50">
@@ -394,7 +357,7 @@ const StudentProfile = () => {
                             </div>
 
                             <button
-                                onClick={() => setShowPasswordModal(true)}
+                                onClick={() => navigate('/change-password')}
                                 className="mt-2 w-full flex items-center justify-center gap-3 px-6 py-4 bg-gray-50 text-gray-700 rounded-2xl font-black hover:bg-gray-100 transition-all border border-gray-200 text-sm"
                             >
                                 <Lock className="w-5 h-5 text-blue-600" /> Change Password
@@ -472,8 +435,8 @@ const StudentProfile = () => {
                                     <DataField label="Academic Level" value={editMode.education ? editData.academicLevel : studentData.academicLevel} options={["High School", "Diploma", "Under-Graduate", "Post-Graduate"]} isEditing={editMode.education} onChange={(v) => handleFieldChange('academicLevel', v)} />
                                     <div className="space-y-2">
                                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Grade Average / Score</label>
-                                        <div className="bg-indigo-50 border-2 border-indigo-100 rounded-2xl px-6 py-4 flex items-center justify-between">
-                                            <span className="text-2xl font-black text-indigo-700 font-mono tracking-tighter">
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 flex items-center justify-between">
+                                            <span className="text-xl font-black text-indigo-700 font-mono tracking-tighter">
                                                 {editMode.education ? (
                                                     <input type="text" value={editData.gradeAverage} onChange={(e) => handleFieldChange('gradeAverage', e.target.value)} className="bg-transparent border-none text-right outline-none w-20" />
                                                 ) : (studentData.gradeAverage || "0.0")}
@@ -488,9 +451,17 @@ const StudentProfile = () => {
                                             <div className="w-1.5 h-6 bg-indigo-600 rounded-full"></div>
                                             Institutions Attended
                                         </h4>
-                                        {editMode.education && (
-                                            <button onClick={() => setEditData(p => ({ ...p, schoolsAttended: [...(p.schoolsAttended || []), { institutionName: '', degreeName: '', fromMonthYear: '', toMonthYear: '' }] }))} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-indigo-100">+ Add Institution</button>
-                                        )}
+                                        <button onClick={() => {
+                                            if (!editMode.education) {
+                                                setEditMode(p => ({ ...p, education: true }));
+                                                setEditData({
+                                                    ...studentData,
+                                                    schoolsAttended: [...(studentData.schoolsAttended || []), { institutionName: '', degreeName: '', fromMonthYear: '', toMonthYear: '' }]
+                                                });
+                                            } else {
+                                                setEditData(p => ({ ...p, schoolsAttended: [...(p.schoolsAttended || []), { institutionName: '', degreeName: '', fromMonthYear: '', toMonthYear: '' }] }));
+                                            }
+                                        }} className="px-4 py-2 bg-indigo-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg shadow-indigo-100">+ Add Institution</button>
                                     </div>
                                     <div className="space-y-6">
                                         {(editMode.education ? editData.schoolsAttended : studentData.schoolsAttended)?.map((school, idx) => (
@@ -517,7 +488,7 @@ const StudentProfile = () => {
 
                     {/* Test Scores */}
                     <section ref={testScoresRef} className="scroll-mt-32">
-                        <div className="bg-white rounded-2xl shadow-2xl shadow-gray-200/50 border border-gray-50 overflow-hidden">
+                        <div className="bg-white rounded-2xl shadow shadow-gray-200/50 border border-gray-50 overflow-hidden">
                             <SectionHeader
                                 title="Standardized Test Scores"
                                 icon={Award}
@@ -539,11 +510,11 @@ const StudentProfile = () => {
                                         <DataField label="Reading" value={editMode.testScores ? editData.readingScore : studentData.readingScore} isEditing={editMode.testScores} onChange={(v) => handleFieldChange('readingScore', v)} mono={true} />
                                         <DataField label="Writing" value={editMode.testScores ? editData.writingScore : studentData.writingScore} isEditing={editMode.testScores} onChange={(v) => handleFieldChange('writingScore', v)} mono={true} />
                                         <DataField label="Speaking" value={editMode.testScores ? editData.speakingScore : studentData.speakingScore} isEditing={editMode.testScores} onChange={(v) => handleFieldChange('speakingScore', v)} mono={true} />
-                                        <div className="col-span-2 bg-blue-600 p-4 rounded-2xl flex flex-col items-center justify-center text-white shadow-xl shadow-blue-100">
-                                            <span className="text-[10px] font-black uppercase tracking-widest opacity-70 leading-none">Overall Score</span>
-                                            <span className="text-3xl font-black font-mono mt-1">
+                                        <div className="col-span-2 bg-blue-600 p-3 rounded-xl flex flex-col items-center justify-center text-white shadow-lg shadow-blue-100/50">
+                                            <span className="text-[10px] font-bold uppercase tracking-widest opacity-80 leading-none">Overall Score</span>
+                                            <span className="text-2xl font-bold font-mono mt-1">
                                                 {editMode.testScores ? (
-                                                    <input type="text" value={editData.overallScore} onChange={e => handleFieldChange('overallScore', e.target.value)} className="bg-transparent border-none text-center outline-none w-20" />
+                                                    <input type="text" value={editData.overallScore} onChange={e => handleFieldChange('overallScore', e.target.value)} className="bg-transparent border-none text-center outline-none w-16" />
                                                 ) : (studentData.overallScore || "0.0")}
                                             </span>
                                         </div>
@@ -557,7 +528,7 @@ const StudentProfile = () => {
                                     </h4>
                                     <div className="space-y-6">
                                         {['gre', 'gmat', 'sat'].map((exam) => (
-                                            <div key={exam} className="bg-white border border-gray-100 rounded-2xl p-8 relative flex flex-col gap-8 hover:shadow-2xl transition-all duration-500 overflow-hidden group">
+                                            <div key={exam} className="bg-white border border-gray-100 rounded-2xl p-8 relative flex flex-col gap-8 hover:shadow-md transition-all duration-500 overflow-hidden group">
                                                 <div className="space-y-6">
                                                     <div className="flex items-center justify-between">
                                                         <div className="flex items-center gap-4">
@@ -571,77 +542,82 @@ const StudentProfile = () => {
                                                         </div>
                                                         <Toggle
                                                             label={`I Have ${exam.toUpperCase()} Exam Scores`}
-                                                            checked={editMode.testScores ? editData.additionalQualifications[exam].hasExam : studentData.additionalQualifications[exam].hasExam}
+                                                            checked={editMode.testScores ? editData.additionalQualifications?.[exam]?.hasExam : studentData.additionalQualifications?.[exam]?.hasExam}
                                                             disabled={!editMode.testScores}
                                                             onChange={(checked) => {
-                                                                setEditData(prev => ({
-                                                                    ...prev,
-                                                                    additionalQualifications: {
-                                                                        ...prev.additionalQualifications,
-                                                                        [exam]: {
-                                                                            ...prev.additionalQualifications[exam],
-                                                                            hasExam: checked
+                                                                console.log('Toggling', exam, checked);
+                                                                setEditData(prev => {
+                                                                    const currentQuals = prev.additionalQualifications || {};
+                                                                    const currentExam = currentQuals[exam] || {};
+                                                                    return {
+                                                                        ...prev,
+                                                                        additionalQualifications: {
+                                                                            ...currentQuals,
+                                                                            [exam]: {
+                                                                                ...currentExam,
+                                                                                hasExam: checked
+                                                                            }
                                                                         }
-                                                                    }
-                                                                }));
+                                                                    };
+                                                                });
                                                             }}
                                                         />
                                                     </div>
 
-                                                    {(editMode.testScores ? editData.additionalQualifications[exam].hasExam : studentData.additionalQualifications[exam].hasExam) && (
+                                                    {(editMode.testScores ? editData.additionalQualifications?.[exam]?.hasExam : studentData.additionalQualifications?.[exam]?.hasExam) && (
                                                         <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                                             {exam === 'gre' && (
                                                                 <div className="space-y-6 mb-6">
                                                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Date of Exam</span>
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
                                                                             <input
                                                                                 type="date"
                                                                                 value={editMode.testScores ? editData.additionalQualifications.gre.examDate : studentData.additionalQualifications.gre.examDate}
                                                                                 onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gre: { ...prev.additionalQualifications.gre, examDate: e.target.value } } }))}
                                                                                 disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50 h-[38px]"
+                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
                                                                             />
                                                                         </div>
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Verbal Score</span>
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Verbal Score</span>
                                                                             <input
                                                                                 type="text"
                                                                                 placeholder="Score"
                                                                                 value={editMode.testScores ? editData.additionalQualifications.gre.verbalScore : studentData.additionalQualifications.gre.verbalScore}
                                                                                 onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalScore: e.target.value } } }))}
                                                                                 disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50"
+                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
                                                                             />
                                                                         </div>
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Verbal Rank</span>
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Verbal Rank</span>
                                                                             <input
                                                                                 type="text"
                                                                                 placeholder="Rank"
                                                                                 value={editMode.testScores ? editData.additionalQualifications.gre.verbalRank : studentData.additionalQualifications.gre.verbalRank}
                                                                                 onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalRank: e.target.value } } }))}
                                                                                 disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50"
+                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
                                                                             />
                                                                         </div>
                                                                     </div>
                                                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Quant Score</span>
-                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.quantScore : studentData.additionalQualifications.gre.quantScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Quant Score</span>
+                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.quantScore : studentData.additionalQualifications.gre.quantScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                         </div>
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Quant Rank</span>
-                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.quantRank : studentData.additionalQualifications.gre.quantRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Quant Rank</span>
+                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.quantRank : studentData.additionalQualifications.gre.quantRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                         </div>
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Writing Score</span>
-                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.writingScore : studentData.additionalQualifications.gre.writingScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Writing Score</span>
+                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.writingScore : studentData.additionalQualifications.gre.writingScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                         </div>
                                                                         <div className="flex flex-col gap-1">
-                                                                            <span className="text-[10px] font-black text-[#002855] ml-1">Writing Rank</span>
-                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.writingRank : studentData.additionalQualifications.gre.writingRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Writing Rank</span>
+                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.writingRank : studentData.additionalQualifications.gre.writingRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -650,13 +626,13 @@ const StudentProfile = () => {
                                                             {exam === 'gmat' && (
                                                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-x-8 gap-y-6 mb-6">
                                                                     <div className="flex flex-col gap-1">
-                                                                        <span className="text-[10px] font-black text-[#002855] ml-1">Date of Exam</span>
+                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
                                                                         <input
                                                                             type="date"
                                                                             value={editMode.testScores ? editData.additionalQualifications.gmat.examDate : studentData.additionalQualifications.gmat.examDate}
                                                                             onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gmat: { ...prev.additionalQualifications.gmat, examDate: e.target.value } } }))}
                                                                             disabled={!editMode.testScores}
-                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50 h-[38px]"
+                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
                                                                         />
                                                                     </div>
                                                                     <ScoreRankField label="Total GMAT" score={editMode.testScores ? editData.additionalQualifications.gmat.totalScore : studentData.additionalQualifications.gmat.totalScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.totalRank : studentData.additionalQualifications.gmat.totalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalRank: v } } }))} />
@@ -669,22 +645,22 @@ const StudentProfile = () => {
                                                             {exam === 'sat' && (
                                                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                                                                     <div className="flex flex-col gap-1">
-                                                                        <span className="text-[10px] font-black text-[#002855] ml-1">Date of Exam</span>
+                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
                                                                         <input
                                                                             type="date"
                                                                             value={editMode.testScores ? editData.additionalQualifications.sat.examDate : studentData.additionalQualifications.sat.examDate}
                                                                             onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, sat: { ...prev.additionalQualifications.sat, examDate: e.target.value } } }))}
                                                                             disabled={!editMode.testScores}
-                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50 h-[38px]"
+                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
                                                                         />
                                                                     </div>
                                                                     <div className="flex flex-col gap-1">
-                                                                        <span className="text-[10px] font-black text-[#002855] ml-1">Reasoning Test Points</span>
-                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.reasoningPoint : studentData.additionalQualifications.sat.reasoningPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, reasoningPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Reasoning Test Points</span>
+                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.reasoningPoint : studentData.additionalQualifications.sat.reasoningPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, reasoningPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                     </div>
                                                                     <div className="flex flex-col gap-1">
-                                                                        <span className="text-[10px] font-black text-[#002855] ml-1">SAT Subject Test Point</span>
-                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.subjectTestPoint : studentData.additionalQualifications.sat.subjectTestPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, subjectTestPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-xs font-bold outline-none focus:border-blue-600 disabled:bg-gray-50" />
+                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">SAT Subject Test Point</span>
+                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.subjectTestPoint : studentData.additionalQualifications.sat.subjectTestPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, subjectTestPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
                                                                     </div>
                                                                 </div>
                                                             )}
@@ -708,7 +684,7 @@ const StudentProfile = () => {
 
                     {/* Background */}
                     <section ref={backgroundRef} className="scroll-mt-32">
-                        <div className="bg-white rounded-2xl shadow-2xl shadow-gray-200/50 border border-gray-50 overflow-hidden">
+                        <div className="bg-white rounded-2xl shadow shadow-gray-200/50 border border-gray-50 overflow-hidden">
                             <SectionHeader title="Global Background" icon={Globe} isEditing={editMode.background} onEdit={() => handleEditToggle('background')} onSave={() => handleSaveEdit('background')} onCancel={() => handleCancelEdit('background')} />
                             <div className="p-10 space-y-10">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -721,7 +697,7 @@ const StudentProfile = () => {
                                 </div>
                                 <div className="space-y-4">
                                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Detailed Background Narrative</label>
-                                    <DataField label="" value={studentData.backgroundDetails} isEditing={editMode.background} onChange={v => handleFieldChange('backgroundDetails', v)} placeholder="Provide context on your academic or visa history..." />
+                                    <DataField label="" type="textarea" value={studentData.backgroundDetails} isEditing={editMode.background} onChange={v => handleFieldChange('backgroundDetails', v)} placeholder="Provide context on your academic or visa history..." />
                                 </div>
                             </div>
                         </div>
@@ -729,7 +705,7 @@ const StudentProfile = () => {
 
                     {/* Documents */}
                     <section ref={uploadRef} className="scroll-mt-32 pb-20">
-                        <div className="bg-white rounded-2xl shadow-2xl shadow-gray-200/50 border border-gray-50 overflow-hidden">
+                        <div className="bg-white rounded-2xl shadow shadow-gray-200/50 border border-gray-50 overflow-hidden">
                             <div className="bg-gray-50 px-8 py-5 border-b border-gray-100">
                                 <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
                                     <div className="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
@@ -756,19 +732,19 @@ const StudentProfile = () => {
                                                 <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
                                                 <button onClick={() => fileInputRef.current.click()} className="w-full h-[62px] bg-white border-2 border-gray-100 rounded-2xl text-xs font-black uppercase hover:border-blue-300 transition-all shadow-sm">{documentForm.selectedFile ? "File selected" : "Select File"}</button>
                                             </div>
-                                            <button onClick={handleUploadSubmit} disabled={uploading} className="w-40 h-[62px] bg-blue-600 text-white rounded-2xl font-black shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-50">Upload</button>
+                                            <button onClick={handleUploadSubmit} disabled={uploading} className="w-40 h-[62px] bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-50">Upload</button>
                                         </div>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     {studentData.documents?.map((doc, idx) => (
-                                        <div key={idx} className="bg-white border border-gray-100 rounded-2xl p-6 flex flex-col gap-6 hover:shadow-2xl transition-all duration-500 relative border-l-4 border-l-blue-600 shadow-sm">
+                                        <div key={idx} className="bg-white border border-gray-100 rounded-2xl p-6 flex flex-col gap-6 hover:shadow-md transition-all duration-500 relative border-l-4 border-l-blue-600 shadow-sm">
                                             {doc.verified && <CheckCircle2 className="w-4 h-4 text-green-500 absolute top-4 right-4" />}
                                             <div>
                                                 <h6 className="font-black text-gray-900 text-lg truncate leading-none">{doc.documentName}</h6>
                                                 <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">{doc.documentType}</p>
                                             </div>
-                                            <a href={doc.documentUrl} target="_blank" rel="noreferrer" className="w-full py-3 bg-gray-50 text-gray-700 rounded-xl font-black text-[10px] uppercase text-center border border-gray-100 hover:bg-gray-100 transition-all">View Document</a>
+                                            <a href={doc.documentUrl?.startsWith('http') ? doc.documentUrl : `http://localhost:5000${doc.documentUrl?.startsWith('/') ? '' : '/'}${doc.documentUrl}`} target="_blank" rel="noreferrer" className="w-full py-3 bg-gray-50 text-gray-700 rounded-xl font-black text-[10px] uppercase text-center border border-gray-100 hover:bg-gray-100 transition-all">View Document</a>
                                         </div>
                                     ))}
                                 </div>
@@ -790,110 +766,6 @@ const StudentProfile = () => {
                 )
             }
 
-            {/* Change Password Modal */}
-            {showPasswordModal && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-0">
-                    <div
-                        className="absolute inset-0 bg-gray-900/60 backdrop-blur-md animate-in fade-in duration-300"
-                        onClick={() => !isChangingPassword && setShowPasswordModal(false)}
-                    ></div>
-                    <div className="relative w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl border border-gray-100 overflow-hidden animate-in zoom-in-95 duration-300">
-                        <div className="bg-gradient-to-br from-blue-600 to-indigo-700 px-10 py-12 text-white relative">
-                            <button
-                                onClick={() => setShowPasswordModal(false)}
-                                className="absolute top-6 right-6 p-2 hover:bg-white/20 rounded-full transition-colors"
-                            >
-                                <X className="w-6 h-6" />
-                            </button>
-                            <div className="w-16 h-16 bg-white/20 rounded-2xl flex items-center justify-center mb-6 backdrop-blur-xl">
-                                <Lock className="w-8 h-8" />
-                            </div>
-                            <h3 className="text-3xl font-black tracking-tight leading-tight">Update Your Password</h3>
-                            <p className="text-blue-100 font-bold text-sm mt-3 opacity-80">Keep your account secure with a strong password.</p>
-                        </div>
-
-                        <form onSubmit={handlePasswordSubmit} className="p-10 space-y-8">
-                            <div className="space-y-6">
-                                {/* Old Password */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Current Password</label>
-                                    <div className="relative">
-                                        <input
-                                            type={showPasswords.old ? "text" : "password"}
-                                            required
-                                            value={passwordForm.oldPassword}
-                                            onChange={(e) => setPasswordForm(p => ({ ...p, oldPassword: e.target.value }))}
-                                            className="w-full bg-gray-50 border-2 border-gray-50 rounded-2xl px-6 py-4 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all"
-                                            placeholder="••••••••"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPasswords(p => ({ ...p, old: !p.old }))}
-                                            className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors"
-                                        >
-                                            {showPasswords.old ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* New Password */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">New Password</label>
-                                    <div className="relative">
-                                        <input
-                                            type={showPasswords.new ? "text" : "password"}
-                                            required
-                                            value={passwordForm.newPassword}
-                                            onChange={(e) => setPasswordForm(p => ({ ...p, newPassword: e.target.value }))}
-                                            className="w-full bg-gray-50 border-2 border-gray-50 rounded-2xl px-6 py-4 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all"
-                                            placeholder="••••••••"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPasswords(p => ({ ...p, new: !p.new }))}
-                                            className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors"
-                                        >
-                                            {showPasswords.new ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Confirm New Password */}
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Confirm New Password</label>
-                                    <div className="relative">
-                                        <input
-                                            type={showPasswords.confirm ? "text" : "password"}
-                                            required
-                                            value={passwordForm.confirmPassword}
-                                            onChange={(e) => setPasswordForm(p => ({ ...p, confirmPassword: e.target.value }))}
-                                            className="w-full bg-gray-50 border-2 border-gray-50 rounded-2xl px-6 py-4 text-gray-900 font-bold focus:border-blue-600 focus:bg-white outline-none transition-all"
-                                            placeholder="••••••••"
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowPasswords(p => ({ ...p, confirm: !p.confirm }))}
-                                            className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors"
-                                        >
-                                            {showPasswords.confirm ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={isChangingPassword}
-                                className="w-full h-[62px] bg-blue-600 text-white rounded-2xl font-black shadow-2xl shadow-blue-100 hover:bg-blue-700 transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-                            >
-                                {isChangingPassword ? (
-                                    <div className="animate-spin rounded-full h-5 w-5 border-t-2 border-b-2 border-white"></div>
-                                ) : "Update Password"}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div >
     );
 };

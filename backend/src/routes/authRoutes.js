@@ -171,6 +171,22 @@ router.get('/me', authMiddleware, AuthController.getMe);
 router.post('/logout', authMiddleware, AuthController.logout);
 
 /**
+ * @route   PUT /api/auth/change-password
+ * @desc    Change user password
+ * @access  Private
+ */
+router.put(
+  '/change-password',
+  authMiddleware,
+  [
+    body('oldPassword').notEmpty().withMessage('Current password is required'),
+    body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters'),
+  ],
+  validateRequest,
+  AuthController.changePassword
+);
+
+/**
  * @route   POST /api/auth/setup-password
  * @desc    Setup password (first-time)
  * @access  Public

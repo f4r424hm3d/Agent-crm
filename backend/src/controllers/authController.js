@@ -901,6 +901,77 @@ class AuthController {
       return ResponseHandler.serverError(res, 'Failed to reset password', error);
     }
   }
+
+  /**
+   * Change Password (Authenticated)
+   * PUT /api/auth/change-password
+   * Body: { oldPassword, newPassword }
+   */
+  static async changePassword(req, res) {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const userId = req.userId;
+      const userRole = req.userRole;
+
+      if (!oldPassword || !newPassword) {
+        return ResponseHandler.badRequest(res, 'Old and new passwords are required');
+      }
+
+      // Validate new password strength
+      const { validatePassword } = require('../utils/passwordValidator');
+      const validation = validatePassword(newPassword);
+      if (!validation.isValid) {
+        return ResponseHandler.badRequest(res, validation.errors.join(', '));
+      }
+
+      let user = null;
+
+      // Find user based on role
+      if (userRole === 'STUDENT') {
+        user = await Student.findById(userId);
+      } else if (userRole === 'AGENT') {
+        user = await Agent.findById(userId);
+      } else {
+        user = await User.findById(userId);
+      }
+
+      if (!user) {
+        return ResponseHandler.notFound(res, 'User not found');
+      }
+
+      // Verify old password
+      const isPasswordValid = await user.comparePassword(oldPassword);
+      if (!isPasswordValid) {
+        return ResponseHandler.badRequest(res, 'Invalid current password');
+      }
+
+      // Update password (will be hashed by pre-save hook)
+      user.password = newPassword;
+      await user.save();
+
+      // Log audit
+      await AuditService.log({
+        userId: userRole === 'STUDENT' ? null : (userRole === 'AGENT' ? null : user._id),
+        userName: user.name || `${user.firstName} ${user.lastName}`,
+        userRole: userRole,
+        agentId: userRole === 'AGENT' ? user._id : null,
+        agentName: userRole === 'AGENT' ? user.name : null,
+        action: 'CHANGE_PASSWORD',
+        entityType: userRole === 'STUDENT' ? 'Student' : (userRole === 'AGENT' ? 'Agent' : 'User'),
+        entityId: user._id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        description: 'User changed their password'
+      });
+
+      logger.info('Password changed successfully', { userId, role: userRole });
+
+      return ResponseHandler.success(res, 'Password updated successfully');
+    } catch (error) {
+      logger.error('Change password error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to update password', error);
+    }
+  }
 }
 
 module.exports = AuthController;

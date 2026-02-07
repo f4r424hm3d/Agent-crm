@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { NavLink } from "react-router-dom";
 import { useSelector } from "react-redux";
 import {
@@ -21,6 +21,16 @@ import {
 import { useDispatch } from "react-redux";
 import { logout } from "../../store/slices/authSlice";
 import { ROLES } from "../../utils/constants";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../components/ui/alert-dialog";
 
 const styles = {
   "#custom-h1-class": {
@@ -32,6 +42,11 @@ const styles = {
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogoutConfirm = () => {
+    setShowLogoutConfirm(true);
+  };
 
   const handleLogout = () => {
     dispatch(logout());
@@ -52,6 +67,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: "/staff", icon: FiUsers, label: "Staff Management" },
           { path: "/roles-permissions", icon: FiShield, label: "Roles & Permissions" },
           { path: "/audit-logs", icon: FiShield, label: "Audit Logs" },
+          { path: "/change-password", icon: FiLock, label: "Change Password" },
           { path: "/settings", icon: FiSettings, label: "Settings" },
         ];
 
@@ -63,6 +79,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: "/applications", icon: FiFileText, label: "Applications" },
           { path: "/commissions", icon: FiDollarSign, label: "Commissions" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
+          { path: "/change-password", icon: FiLock, label: "Change Password" },
         ];
 
       case ROLES.AGENT:
@@ -72,16 +89,17 @@ const Sidebar = ({ isOpen, onClose }) => {
           { path: "/applications", icon: FiFileText, label: "Applications" },
           { path: "/earnings", icon: FiDollarSign, label: "Earnings" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
+          { path: "/change-password", icon: FiLock, label: "Change Password" },
         ];
 
       case ROLES.STUDENT:
         return [
           { path: "/dashboard", icon: FiHome, label: "Dashboard" },
-          { onClick: () => { }, icon: FiFileText, label: "Applied Colleges" },
+          { path: "/applications", icon: FiFileText, label: "Applied Colleges" },
           { onClick: () => { }, icon: FiHeart, label: "Shortlisted Colleges" },
           { path: "/profile", icon: FiUserCheck, label: "Profile" },
-          { onClick: () => { }, icon: FiLock, label: "Change Password" },
-          { path: "/logout", icon: FiLogOut, label: "Logout", onClick: handleLogout },
+          { path: "/change-password", icon: FiLock, label: "Change Password" },
+          { path: "/logout", icon: FiLogOut, label: "Logout", onClick: handleLogoutConfirm },
         ];
 
       default:
@@ -167,6 +185,27 @@ const Sidebar = ({ isOpen, onClose }) => {
           </div>
         </div>
       </aside>
+
+      {/* Logout Confirmation AlertDialog */}
+      <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to logout? You'll need to login again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleLogout}
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+            >
+              Logout
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

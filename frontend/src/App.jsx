@@ -27,6 +27,7 @@ import AdminDashboard from "./pages/dashboard/AdminDashboard";
 import AgentDashboard from "./pages/dashboard/AgentDashboard";
 import StudentDashboard from "./pages/dashboard/StudentDashboard";
 import RoleBasedProfile from "./pages/RoleBasedProfile";
+import ChangePassword from "./pages/auth/ChangePassword";
 
 // Admin Pages
 import AdminList from "./pages/admins/AdminList";
@@ -476,6 +477,11 @@ function AppContent() {
         <Route path="profile" element={
           <ProtectedRoute>
             <RoleBasedProfile />
+          </ProtectedRoute>
+        } />
+        <Route path="change-password" element={
+          <ProtectedRoute>
+            <ChangePassword />
           </ProtectedRoute>
         } />
         <Route
