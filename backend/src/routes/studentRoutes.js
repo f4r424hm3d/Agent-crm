@@ -59,6 +59,13 @@ router.post(
   StudentController.uploadMyDocument
 );
 
+// Delete current student's own document
+router.delete(
+  '/me/documents/:documentId',
+  authMiddleware,
+  StudentController.deleteMyDocument
+);
+
 router.get('/:id', authMiddleware, StudentController.getStudentById);
 
 router.post(
@@ -84,6 +91,13 @@ router.post(
   [body('document_type').trim().notEmpty().withMessage('Document type is required')],
   validateRequest,
   StudentController.uploadDocument
+);
+
+router.delete(
+  '/:id/documents/:documentId',
+  authMiddleware,
+  // potentially add role check here if needed, butauthMiddleware might handle basic user context
+  StudentController.deleteDocument
 );
 
 module.exports = router;

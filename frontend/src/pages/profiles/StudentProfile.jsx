@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { useNavigate } from 'react-router-dom';
-import { User, UserCircle2, Home, GraduationCap, MessageSquare, Lock, ChevronLeft, Globe, MapPin, Phone, Mail, Calendar, FileText, CheckCircle2, Award, LogOut, Trash2, Plus, X, Eye, EyeOff } from 'lucide-react';
+import { User, UserCircle2, Home, GraduationCap, MessageSquare, Lock, ChevronLeft, ChevronDown, ChevronUp, Globe, MapPin, Phone, Mail, Calendar, FileText, CheckCircle2, Award, LogOut, Trash2, Plus, X, Eye, EyeOff } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import authService from '../../services/authService';
 
@@ -53,25 +53,27 @@ const ScoreRankField = ({ label, score, rank, onScoreChange, onRankChange, isEdi
     </div>
 );
 
-const SectionHeader = ({ title, icon: Icon, isEditing, onEdit, onSave, onCancel }) => (
+const SectionFooter = ({ onSave, onCancel }) => (
+    <div className="flex justify-end gap-3 pt-8 border-t border-gray-50 mt-8">
+        <button onClick={onCancel} className="px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl font-bold hover:bg-gray-50 transition-all text-sm">
+            Cancel
+        </button>
+        <button onClick={onSave} className="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 transition-all text-sm shadow-lg shadow-blue-100">
+            Save Changes
+        </button>
+    </div>
+);
+
+const SectionHeader = ({ title, icon: Icon, isEditing, onEdit }) => (
     <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Icon className="text-blue-600 w-5 h-5" />
             {title}
         </h3>
-        {!isEditing ? (
+        {!isEditing && onEdit && (
             <button onClick={onEdit} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors">
                 Edit
             </button>
-        ) : (
-            <div className="flex gap-2">
-                <button onClick={onCancel} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 text-sm font-medium transition-colors">
-                    Cancel
-                </button>
-                <button onClick={onSave} className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium transition-colors">
-                    Save
-                </button>
-            </div>
         )}
     </div>
 );
@@ -195,7 +197,17 @@ const StudentProfile = () => {
 
     const handleEditToggle = (section) => {
         setEditMode(prev => ({ ...prev, [section]: true }));
-        setEditData({ ...studentData });
+        const currentData = { ...studentData };
+
+        // Ensure nested objects exist for test scores
+        if (section === 'testScores') {
+            currentData.additionalQualifications = currentData.additionalQualifications || {};
+            currentData.additionalQualifications.gre = currentData.additionalQualifications.gre || { hasExam: false };
+            currentData.additionalQualifications.gmat = currentData.additionalQualifications.gmat || { hasExam: false };
+            currentData.additionalQualifications.sat = currentData.additionalQualifications.sat || { hasExam: false };
+        }
+
+        setEditData(currentData);
     };
 
     const handleCancelEdit = (section) => {
@@ -205,6 +217,23 @@ const StudentProfile = () => {
 
     const handleFieldChange = (field, value) => {
         setEditData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleExamToggle = (examType, checked) => {
+        setEditData(prev => {
+            const currentExam = prev.additionalQualifications?.[examType] || {};
+            const newState = {
+                ...prev,
+                additionalQualifications: {
+                    ...prev.additionalQualifications,
+                    [examType]: {
+                        ...currentExam,
+                        hasExam: checked
+                    }
+                }
+            };
+            return newState;
+        });
     };
 
     const handleSaveEdit = async (section) => {
@@ -220,6 +249,52 @@ const StudentProfile = () => {
             }
         } catch (err) {
             setUploadError(err.response?.data?.message || 'Update failed');
+            setTimeout(() => setUploadError(null), 3000);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleClearExam = (examType) => {
+        setClearExamType(examType);
+    };
+
+    const confirmClearExam = async () => {
+        if (!clearExamType) return;
+        const examType = clearExamType;
+
+        try {
+            setLoading(true);
+            const updatedData = {
+                ...editData,
+                additionalQualifications: {
+                    ...editData.additionalQualifications,
+                    [examType]: { hasExam: false }
+                }
+            };
+
+            // Update local edit state first to reflect changes immediately in UI if we were to stay in edit mode
+            setEditData(updatedData);
+
+            const response = await apiClient.put('/students/me', updatedData);
+            if (response.data.success) {
+                // Manually update studentData to reflect the change
+                setStudentData(prev => ({
+                    ...prev,
+                    additionalQualifications: {
+                        ...prev.additionalQualifications,
+                        [examType]: { hasExam: false }
+                    }
+                }));
+
+                setUploadSuccess(`${examType.toUpperCase()} record cleared!`);
+                setClearExamType(null);
+                setTimeout(() => setUploadSuccess(null), 3000);
+            }
+        } catch (err) {
+            console.error('Error clearing exam:', err);
+            setUploadError('Failed to clear record.');
+            setClearExamType(null);
             setTimeout(() => setUploadError(null), 3000);
         } finally {
             setLoading(false);
@@ -253,6 +328,52 @@ const StudentProfile = () => {
             setUploadError('Upload failed');
         } finally {
             setUploading(false);
+        }
+    };
+
+    const [deleteId, setDeleteId] = useState(null);
+    const [clearExamType, setClearExamType] = useState(null);
+
+    const handleDeleteDocument = (documentId, e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        setDeleteId(documentId);
+    };
+
+    const confirmDelete = async () => {
+        const documentId = deleteId;
+        if (!deleteId) return;
+
+        console.log("Confirming delete for:", deleteId);
+
+        try {
+            const token = localStorage.getItem('token');
+            console.log("Token present:", !!token);
+
+            // Assuming the logged-in user is the student
+            const response = await apiClient.delete(`/students/me/documents/${documentId}`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            console.log("Delete response:", response);
+
+            // Update local state by filtering out the deleted document
+            setStudentData(prev => ({
+                ...prev,
+                documents: prev.documents.filter(doc => doc._id !== documentId)
+            }));
+
+            setUploadSuccess('Document deleted successfully');
+            setDeleteId(null);
+            setTimeout(() => setUploadSuccess(null), 3000);
+
+        } catch (error) {
+            console.error("Delete error details:", error);
+            setUploadError(error.response?.data?.message || 'Failed to delete document');
+            setDeleteId(null);
+            setTimeout(() => setUploadError(null), 3000);
         }
     };
 
@@ -383,7 +504,7 @@ const StudentProfile = () => {
                                 onSave={() => handleSaveEdit('general')}
                                 onCancel={() => handleCancelEdit('general')}
                             />
-                            <div className="p-10 space-y-10">
+                            <div className="p-6 md:p-10 space-y-10">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <DataField label="First Name" value={editMode.general ? editData.firstName : studentData.firstName} isEditing={editMode.general} onChange={(v) => handleFieldChange('firstName', v)} />
                                     <DataField label="Last Name" value={editMode.general ? editData.lastName : studentData.lastName} isEditing={editMode.general} onChange={(v) => handleFieldChange('lastName', v)} />
@@ -414,6 +535,10 @@ const StudentProfile = () => {
                                     <div className="mt-8">
                                         <DataField label="Full Home Address" value={editMode.general ? editData.address : studentData.address} isEditing={editMode.general} onChange={(v) => handleFieldChange('address', v)} icon={MapPin} />
                                     </div>
+
+                                    {editMode.general && (
+                                        <SectionFooter onSave={() => handleSaveEdit('general')} onCancel={() => handleCancelEdit('general')} />
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -430,7 +555,7 @@ const StudentProfile = () => {
                                 onSave={() => handleSaveEdit('education')}
                                 onCancel={() => handleCancelEdit('education')}
                             />
-                            <div className="p-10 space-y-10">
+                            <div className="p-6 md:p-10 space-y-10">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <DataField label="Academic Level" value={editMode.education ? editData.academicLevel : studentData.academicLevel} options={["High School", "Diploma", "Under-Graduate", "Post-Graduate"]} isEditing={editMode.education} onChange={(v) => handleFieldChange('academicLevel', v)} />
                                     <div className="space-y-2">
@@ -482,6 +607,9 @@ const StudentProfile = () => {
                                         ))}
                                     </div>
                                 </div>
+                                {editMode.education && (
+                                    <SectionFooter onSave={() => handleSaveEdit('education')} onCancel={() => handleCancelEdit('education')} />
+                                )}
                             </div>
                         </div>
                     </section>
@@ -527,155 +655,267 @@ const StudentProfile = () => {
                                         Standardized Test Scores
                                     </h4>
                                     <div className="space-y-6">
-                                        {['gre', 'gmat', 'sat'].map((exam) => (
-                                            <div key={exam} className="bg-white border border-gray-100 rounded-2xl p-8 relative flex flex-col gap-8 hover:shadow-md transition-all duration-500 overflow-hidden group">
-                                                <div className="space-y-6">
-                                                    <div className="flex items-center justify-between">
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="p-3 bg-blue-50 rounded-xl text-blue-600 transition-colors group-hover:bg-blue-600 group-hover:text-white">
-                                                                <Award className="w-5 h-5" />
-                                                            </div>
-                                                            <div>
-                                                                <h5 className="font-black text-gray-900 uppercase tracking-widest text-[10px] opacity-40 leading-none mb-1">Standardized Test</h5>
-                                                                <h6 className="font-black text-gray-900 text-lg uppercase">{exam}</h6>
-                                                            </div>
+                                        <div className="space-y-12">
+                                            {/* GRE Section */}
+                                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md group">
+                                                <div
+                                                    onClick={() => {
+                                                        if (!editMode.testScores) {
+                                                            handleEditToggle('testScores');
+                                                            setEditData(prev => ({
+                                                                ...prev,
+                                                                additionalQualifications: {
+                                                                    ...prev.additionalQualifications,
+                                                                    gre: { ...prev.additionalQualifications?.gre, hasExam: true }
+                                                                }
+                                                            }));
+                                                        } else {
+                                                            handleExamToggle('gre', !editData.additionalQualifications?.gre?.hasExam);
+                                                        }
+                                                    }}
+                                                    className={`w-full px-6 py-4 flex items-center justify-between transition-all duration-200 cursor-pointer ${(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ? 'bg-white border-b border-gray-100' : 'bg-white hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ? 'bg-purple-50 text-purple-600' : 'bg-gray-100 text-gray-500 group-hover:bg-purple-50 group-hover:text-purple-600'}`}>
+                                                            <Award className="w-5 h-5" />
                                                         </div>
-                                                        <Toggle
-                                                            label={`I Have ${exam.toUpperCase()} Exam Scores`}
-                                                            checked={editMode.testScores ? editData.additionalQualifications?.[exam]?.hasExam : studentData.additionalQualifications?.[exam]?.hasExam}
-                                                            disabled={!editMode.testScores}
-                                                            onChange={(checked) => {
-                                                                console.log('Toggling', exam, checked);
-                                                                setEditData(prev => {
-                                                                    const currentQuals = prev.additionalQualifications || {};
-                                                                    const currentExam = currentQuals[exam] || {};
-                                                                    return {
-                                                                        ...prev,
-                                                                        additionalQualifications: {
-                                                                            ...currentQuals,
-                                                                            [exam]: {
-                                                                                ...currentExam,
-                                                                                hasExam: checked
-                                                                            }
-                                                                        }
-                                                                    };
-                                                                });
-                                                            }}
-                                                        />
+                                                        <span className={`font-bold text-lg transition-colors ${(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                                                            {(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ? 'GRE Details' : 'Add GRE Score'}
+                                                        </span>
                                                     </div>
-
-                                                    {(editMode.testScores ? editData.additionalQualifications?.[exam]?.hasExam : studentData.additionalQualifications?.[exam]?.hasExam) && (
-                                                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                                                            {exam === 'gre' && (
-                                                                <div className="space-y-6 mb-6">
-                                                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
-                                                                            <input
-                                                                                type="date"
-                                                                                value={editMode.testScores ? editData.additionalQualifications.gre.examDate : studentData.additionalQualifications.gre.examDate}
-                                                                                onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gre: { ...prev.additionalQualifications.gre, examDate: e.target.value } } }))}
-                                                                                disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Verbal Score</span>
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="Score"
-                                                                                value={editMode.testScores ? editData.additionalQualifications.gre.verbalScore : studentData.additionalQualifications.gre.verbalScore}
-                                                                                onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalScore: e.target.value } } }))}
-                                                                                disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
-                                                                            />
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Verbal Rank</span>
-                                                                            <input
-                                                                                type="text"
-                                                                                placeholder="Rank"
-                                                                                value={editMode.testScores ? editData.additionalQualifications.gre.verbalRank : studentData.additionalQualifications.gre.verbalRank}
-                                                                                onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalRank: e.target.value } } }))}
-                                                                                disabled={!editMode.testScores}
-                                                                                className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50"
-                                                                            />
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Quant Score</span>
-                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.quantScore : studentData.additionalQualifications.gre.quantScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Quant Rank</span>
-                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.quantRank : studentData.additionalQualifications.gre.quantRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Writing Score</span>
-                                                                            <input type="text" placeholder="Score" value={editMode.testScores ? editData.additionalQualifications.gre.writingScore : studentData.additionalQualifications.gre.writingScore} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingScore: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                        </div>
-                                                                        <div className="flex flex-col gap-1">
-                                                                            <span className="text-xs font-semibold text-gray-700 ml-1">Writing Rank</span>
-                                                                            <input type="text" placeholder="Rank" value={editMode.testScores ? editData.additionalQualifications.gre.writingRank : studentData.additionalQualifications.gre.writingRank} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingRank: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            )}
-
-                                                            {exam === 'gmat' && (
-                                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-x-8 gap-y-6 mb-6">
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
-                                                                        <input
-                                                                            type="date"
-                                                                            value={editMode.testScores ? editData.additionalQualifications.gmat.examDate : studentData.additionalQualifications.gmat.examDate}
-                                                                            onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gmat: { ...prev.additionalQualifications.gmat, examDate: e.target.value } } }))}
-                                                                            disabled={!editMode.testScores}
-                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
-                                                                        />
-                                                                    </div>
-                                                                    <ScoreRankField label="Total GMAT" score={editMode.testScores ? editData.additionalQualifications.gmat.totalScore : studentData.additionalQualifications.gmat.totalScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.totalRank : studentData.additionalQualifications.gmat.totalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalRank: v } } }))} />
-                                                                    <ScoreRankField label="Verbal" score={editMode.testScores ? editData.additionalQualifications.gmat.verbalScore : studentData.additionalQualifications.gmat.verbalScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.verbalRank : studentData.additionalQualifications.gmat.verbalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, verbalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, verbalRank: v } } }))} />
-                                                                    <ScoreRankField label="Quantitative" score={editMode.testScores ? editData.additionalQualifications.gmat.quantScore : studentData.additionalQualifications.gmat.quantScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.quantRank : studentData.additionalQualifications.gmat.quantRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, quantScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, quantRank: v } } }))} />
-                                                                    <ScoreRankField label="Integrated reasoning" score={editMode.testScores ? editData.additionalQualifications.gmat.irScore : studentData.additionalQualifications.gmat.irScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.irRank : studentData.additionalQualifications.gmat.irRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, irScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, irRank: v } } }))} />
-                                                                </div>
-                                                            )}
-
-                                                            {exam === 'sat' && (
-                                                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Date of Exam</span>
-                                                                        <input
-                                                                            type="date"
-                                                                            value={editMode.testScores ? editData.additionalQualifications.sat.examDate : studentData.additionalQualifications.sat.examDate}
-                                                                            onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, sat: { ...prev.additionalQualifications.sat, examDate: e.target.value } } }))}
-                                                                            disabled={!editMode.testScores}
-                                                                            className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50 h-[38px]"
-                                                                        />
-                                                                    </div>
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">Reasoning Test Points</span>
-                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.reasoningPoint : studentData.additionalQualifications.sat.reasoningPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, reasoningPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                    </div>
-                                                                    <div className="flex flex-col gap-1">
-                                                                        <span className="text-xs font-semibold text-gray-700 ml-1">SAT Subject Test Point</span>
-                                                                        <input type="text" placeholder="Points" value={editMode.testScores ? editData.additionalQualifications.sat.subjectTestPoint : studentData.additionalQualifications.sat.subjectTestPoint} onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, subjectTestPoint: e.target.value } } }))} disabled={!editMode.testScores} className="w-full bg-white border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-50" />
-                                                                    </div>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    )}
-
-                                                    {editMode.testScores && (
-                                                        <div className="flex justify-end gap-2 pt-4 border-t border-gray-100">
-                                                            <button onClick={() => handleSaveEdit('testScores')} className="px-5 py-2 bg-[#004a99] text-white rounded-md text-xs font-black hover:bg-blue-800 transition-all">Save</button>
-                                                            <button onClick={() => handleCancelEdit('testScores')} className="px-5 py-2 bg-black text-white rounded-md text-xs font-black hover:bg-gray-800 transition-all">Cancel</button>
-                                                        </div>
-                                                    )}
+                                                    <div className={`p-2 rounded-lg border-2 transition-colors duration-200 ${(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ? 'border-purple-100 bg-purple-50 text-purple-600' : 'border-gray-100 bg-gray-50 text-gray-400 group-hover:border-purple-100 group-hover:text-purple-600'}`}>
+                                                        {(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) ?
+                                                            <ChevronUp className="w-5 h-5" /> :
+                                                            <div className="w-5 h-5 flex items-center justify-center"><Plus className="w-4 h-4" /></div>
+                                                        }
+                                                    </div>
                                                 </div>
+
+                                                {(editMode.testScores ? editData.additionalQualifications?.gre?.hasExam : studentData.additionalQualifications?.gre?.hasExam) && (
+                                                    <div className="p-6 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className="text-sm font-bold text-gray-700">Date of Exam</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={editMode.testScores ? editData.additionalQualifications.gre.examDate : studentData.additionalQualifications.gre.examDate}
+                                                                    onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gre: { ...prev.additionalQualifications.gre, examDate: e.target.value } } }))}
+                                                                    disabled={!editMode.testScores}
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 disabled:bg-gray-50 transition-all font-medium"
+                                                                />
+                                                            </div>
+                                                            <ScoreRankField label="Verbal" score={editMode.testScores ? editData.additionalQualifications.gre.verbalScore : studentData.additionalQualifications.gre.verbalScore} rank={editMode.testScores ? editData.additionalQualifications.gre.verbalRank : studentData.additionalQualifications.gre.verbalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, verbalRank: v } } }))} />
+                                                            <ScoreRankField label="Quant" score={editMode.testScores ? editData.additionalQualifications.gre.quantScore : studentData.additionalQualifications.gre.quantScore} rank={editMode.testScores ? editData.additionalQualifications.gre.quantRank : studentData.additionalQualifications.gre.quantRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, quantRank: v } } }))} />
+                                                            <ScoreRankField label="Writing" score={editMode.testScores ? editData.additionalQualifications.gre.writingScore : studentData.additionalQualifications.gre.writingScore} rank={editMode.testScores ? editData.additionalQualifications.gre.writingRank : studentData.additionalQualifications.gre.writingRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gre: { ...p.additionalQualifications.gre, writingRank: v } } }))} />
+                                                        </div>
+                                                        {editMode.testScores && (
+                                                            <div className="flex justify-between items-center pt-6 border-t border-gray-100">
+                                                                <button
+                                                                    onClick={() => handleClearExam('gre')}
+                                                                    className="px-6 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                                                >
+                                                                    Clear Record
+                                                                </button>
+                                                                <div className="flex gap-3">
+                                                                    <button
+                                                                        onClick={() => handleCancelEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleSaveEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors shadow-sm shadow-purple-200"
+                                                                    >
+                                                                        Save Changes
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                        ))}
+
+                                            {/* GMAT Section */}
+                                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md group">
+                                                <div
+                                                    onClick={() => {
+                                                        if (!editMode.testScores) {
+                                                            handleEditToggle('testScores');
+                                                            setEditData(prev => ({
+                                                                ...prev,
+                                                                additionalQualifications: {
+                                                                    ...prev.additionalQualifications,
+                                                                    gmat: { ...prev.additionalQualifications?.gmat, hasExam: true }
+                                                                }
+                                                            }));
+                                                        } else {
+                                                            handleExamToggle('gmat', !editData.additionalQualifications?.gmat?.hasExam);
+                                                        }
+                                                    }}
+                                                    className={`w-full px-6 py-4 flex items-center justify-between transition-all duration-200 cursor-pointer ${(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ? 'bg-white border-b border-gray-100' : 'bg-white hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-gray-500 group-hover:bg-amber-50 group-hover:text-amber-600'}`}>
+                                                            <Award className="w-5 h-5" />
+                                                        </div>
+                                                        <span className={`font-bold text-lg transition-colors ${(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                                                            {(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ? 'GMAT Details' : 'Add GMAT Score'}
+                                                        </span>
+                                                    </div>
+                                                    <div className={`p-2 rounded-lg border-2 transition-colors duration-200 ${(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ? 'border-amber-100 bg-amber-50 text-amber-600' : 'border-gray-100 bg-gray-50 text-gray-400 group-hover:border-amber-100 group-hover:text-amber-600'}`}>
+                                                        {(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) ?
+                                                            <ChevronUp className="w-5 h-5" /> :
+                                                            <div className="w-5 h-5 flex items-center justify-center"><Plus className="w-4 h-4" /></div>
+                                                        }
+                                                    </div>
+                                                </div>
+
+                                                {(editMode.testScores ? editData.additionalQualifications?.gmat?.hasExam : studentData.additionalQualifications?.gmat?.hasExam) && (
+                                                    <div className="p-6 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className="text-sm font-bold text-gray-700">Date of Exam</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={editMode.testScores ? editData.additionalQualifications.gmat.examDate : studentData.additionalQualifications.gmat.examDate}
+                                                                    onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, gmat: { ...prev.additionalQualifications.gmat, examDate: e.target.value } } }))}
+                                                                    disabled={!editMode.testScores}
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 disabled:bg-gray-50 transition-all font-medium"
+                                                                />
+                                                            </div>
+                                                            <ScoreRankField label="Total Score" score={editMode.testScores ? editData.additionalQualifications.gmat.totalScore : studentData.additionalQualifications.gmat.totalScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.totalRank : studentData.additionalQualifications.gmat.totalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, totalRank: v } } }))} />
+                                                            <ScoreRankField label="Verbal" score={editMode.testScores ? editData.additionalQualifications.gmat.verbalScore : studentData.additionalQualifications.gmat.verbalScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.verbalRank : studentData.additionalQualifications.gmat.verbalRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, verbalScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, verbalRank: v } } }))} />
+                                                            <ScoreRankField label="Quant" score={editMode.testScores ? editData.additionalQualifications.gmat.quantScore : studentData.additionalQualifications.gmat.quantScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.quantRank : studentData.additionalQualifications.gmat.quantRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, quantScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, quantRank: v } } }))} />
+                                                            <ScoreRankField label="Integrated Reasoning" score={editMode.testScores ? editData.additionalQualifications.gmat.irScore : studentData.additionalQualifications.gmat.irScore} rank={editMode.testScores ? editData.additionalQualifications.gmat.irRank : studentData.additionalQualifications.gmat.irRank} isEditing={editMode.testScores} onScoreChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, irScore: v } } }))} onRankChange={v => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, gmat: { ...p.additionalQualifications.gmat, irRank: v } } }))} />
+                                                        </div>
+                                                        {editMode.testScores && (
+                                                            <div className="flex justify-between items-center pt-6 border-t border-gray-100">
+                                                                <button
+                                                                    onClick={() => handleClearExam('gmat')}
+                                                                    className="px-6 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                                                >
+                                                                    Clear Record
+                                                                </button>
+                                                                <div className="flex gap-3">
+                                                                    <button
+                                                                        onClick={() => handleCancelEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleSaveEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors shadow-sm shadow-amber-200"
+                                                                    >
+                                                                        Save Changes
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* SAT Section */}
+                                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md group">
+                                                <div
+                                                    onClick={() => {
+                                                        if (!editMode.testScores) {
+                                                            handleEditToggle('testScores');
+                                                            setEditData(prev => ({
+                                                                ...prev,
+                                                                additionalQualifications: {
+                                                                    ...prev.additionalQualifications,
+                                                                    sat: { ...prev.additionalQualifications?.sat, hasExam: true }
+                                                                }
+                                                            }));
+                                                        } else {
+                                                            handleExamToggle('sat', !editData.additionalQualifications?.sat?.hasExam);
+                                                        }
+                                                    }}
+                                                    className={`w-full px-6 py-4 flex items-center justify-between transition-all duration-200 cursor-pointer ${(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ? 'bg-white border-b border-gray-100' : 'bg-white hover:bg-gray-50'}`}
+                                                >
+                                                    <div className="flex items-center gap-4">
+                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors ${(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ? 'bg-pink-50 text-pink-600' : 'bg-gray-100 text-gray-500 group-hover:bg-pink-50 group-hover:text-pink-600'}`}>
+                                                            <Award className="w-5 h-5" />
+                                                        </div>
+                                                        <span className={`font-bold text-lg transition-colors ${(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ? 'text-gray-900' : 'text-gray-600 group-hover:text-gray-900'}`}>
+                                                            {(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ? 'SAT Details' : 'Add SAT Score'}
+                                                        </span>
+                                                    </div>
+                                                    <div className={`p-2 rounded-lg border-2 transition-colors duration-200 ${(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ? 'border-pink-100 bg-pink-50 text-pink-600' : 'border-gray-100 bg-gray-50 text-gray-400 group-hover:border-pink-100 group-hover:text-pink-600'}`}>
+                                                        {(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) ?
+                                                            <ChevronUp className="w-5 h-5" /> :
+                                                            <div className="w-5 h-5 flex items-center justify-center"><Plus className="w-4 h-4" /></div>
+                                                        }
+                                                    </div>
+                                                </div>
+
+                                                {(editMode.testScores ? editData.additionalQualifications?.sat?.hasExam : studentData.additionalQualifications?.sat?.hasExam) && (
+                                                    <div className="p-6 bg-white animate-in slide-in-from-top-2 fade-in duration-200">
+                                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className="text-sm font-bold text-gray-700">Date of Exam</span>
+                                                                <input
+                                                                    type="date"
+                                                                    value={editMode.testScores ? editData.additionalQualifications.sat.examDate : studentData.additionalQualifications.sat.examDate}
+                                                                    onChange={e => setEditData(prev => ({ ...prev, additionalQualifications: { ...prev.additionalQualifications, sat: { ...prev.additionalQualifications.sat, examDate: e.target.value } } }))}
+                                                                    disabled={!editMode.testScores}
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 disabled:bg-gray-50 transition-all font-medium"
+                                                                />
+                                                            </div>
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className="text-sm font-bold text-gray-700">Reasoning Test Points</span>
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Points"
+                                                                    value={editMode.testScores ? editData.additionalQualifications.sat.reasoningPoint : studentData.additionalQualifications.sat.reasoningPoint}
+                                                                    onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, reasoningPoint: e.target.value } } }))}
+                                                                    disabled={!editMode.testScores}
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 disabled:bg-gray-50 transition-all font-medium"
+                                                                />
+                                                            </div>
+                                                            <div className="flex flex-col gap-2">
+                                                                <span className="text-sm font-bold text-gray-700">Subject Test Points</span>
+                                                                <input
+                                                                    type="text"
+                                                                    placeholder="Points"
+                                                                    value={editMode.testScores ? editData.additionalQualifications.sat.subjectTestPoint : studentData.additionalQualifications.sat.subjectTestPoint}
+                                                                    onChange={e => setEditData(p => ({ ...p, additionalQualifications: { ...p.additionalQualifications, sat: { ...p.additionalQualifications.sat, subjectTestPoint: e.target.value } } }))}
+                                                                    disabled={!editMode.testScores}
+                                                                    className="w-full bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5 text-sm text-gray-900 outline-none focus:border-pink-500 focus:ring-4 focus:ring-pink-500/10 disabled:bg-gray-50 transition-all font-medium"
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {editMode.testScores && (
+                                                            <div className="flex justify-between items-center pt-6 border-t border-gray-100">
+                                                                <button
+                                                                    onClick={() => handleClearExam('sat')}
+                                                                    className="px-6 py-2.5 text-sm font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+                                                                >
+                                                                    Clear Record
+                                                                </button>
+                                                                <div className="flex gap-3">
+                                                                    <button
+                                                                        onClick={() => handleCancelEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={() => handleSaveEdit('testScores')}
+                                                                        className="px-6 py-2.5 text-sm font-bold text-white bg-pink-600 rounded-lg hover:bg-pink-700 transition-colors shadow-sm shadow-pink-200"
+                                                                    >
+                                                                        Save Changes
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -686,7 +926,7 @@ const StudentProfile = () => {
                     <section ref={backgroundRef} className="scroll-mt-32">
                         <div className="bg-white rounded-2xl shadow shadow-gray-200/50 border border-gray-50 overflow-hidden">
                             <SectionHeader title="Global Background" icon={Globe} isEditing={editMode.background} onEdit={() => handleEditToggle('background')} onSave={() => handleSaveEdit('background')} onCancel={() => handleCancelEdit('background')} />
-                            <div className="p-10 space-y-10">
+                            <div className="p-6 md:p-10 space-y-10">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                     <div className="p-6 bg-red-50/50 border-2 border-red-50 rounded-2xl">
                                         <DataField label="Visa Refusal Record" value={studentData.visaRefusal} options={["YES", "NO"]} isEditing={editMode.background} onChange={v => handleFieldChange('visaRefusal', v)} />
@@ -699,6 +939,9 @@ const StudentProfile = () => {
                                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Detailed Background Narrative</label>
                                     <DataField label="" type="textarea" value={studentData.backgroundDetails} isEditing={editMode.background} onChange={v => handleFieldChange('backgroundDetails', v)} placeholder="Provide context on your academic or visa history..." />
                                 </div>
+                                {editMode.background && (
+                                    <SectionFooter onSave={() => handleSaveEdit('background')} onCancel={() => handleCancelEdit('background')} />
+                                )}
                             </div>
                         </div>
                     </section>
@@ -706,52 +949,95 @@ const StudentProfile = () => {
                     {/* Documents */}
                     <section ref={uploadRef} className="scroll-mt-32 pb-20">
                         <div className="bg-white rounded-2xl shadow shadow-gray-200/50 border border-gray-50 overflow-hidden">
-                            <div className="bg-gray-50 px-8 py-5 border-b border-gray-100">
-                                <h3 className="text-xl font-black text-gray-900 flex items-center gap-3">
-                                    <div className="p-2 bg-white rounded-xl shadow-sm border border-gray-100">
-                                        <FileText className="text-blue-600 w-5 h-5" />
-                                    </div>
-                                    Secure Document Vault
-                                </h3>
-                            </div>
-                            <div className="p-10 space-y-10">
-                                <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-2xl p-10 group/upload hover:bg-blue-50/10 transition-all">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-end">
-                                        <div className="space-y-4">
-                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">Document Label</label>
+                            <SectionHeader
+                                title="Secure Document Vault"
+                                icon={FileText}
+                                isEditing={false} // Upload is always active or handled differently
+                            />
+
+                            <div className="p-6 md:p-10 space-y-8">
+                                {/* Upload Area - Simplified */}
+                                <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
+                                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                                        <div className="flex-1 w-full space-y-2">
+                                            <label className="text-xs font-bold uppercase tracking-widest text-gray-500 ml-1">Document Name</label>
                                             <input
                                                 type="text"
                                                 value={documentForm.documentName}
                                                 onChange={(e) => setDocumentForm(v => ({ ...v, documentName: e.target.value }))}
-                                                className="w-full bg-white border-2 border-blue-50 rounded-2xl px-6 py-4 text-gray-900 font-bold focus:border-blue-600 outline-none transition-all shadow-sm"
-                                                placeholder="e.g. Passport, Degree"
+                                                className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                                                placeholder="e.g. Passport, Degree Certificate"
                                             />
                                         </div>
-                                        <div className="flex gap-4">
-                                            <div className="flex-1">
-                                                <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
-                                                <button onClick={() => fileInputRef.current.click()} className="w-full h-[62px] bg-white border-2 border-gray-100 rounded-2xl text-xs font-black uppercase hover:border-blue-300 transition-all shadow-sm">{documentForm.selectedFile ? "File selected" : "Select File"}</button>
-                                            </div>
-                                            <button onClick={handleUploadSubmit} disabled={uploading} className="w-40 h-[62px] bg-blue-600 text-white rounded-2xl font-black shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all disabled:opacity-50">Upload</button>
+                                        <div className="w-full md:w-auto flex gap-3">
+                                            <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+                                            <button
+                                                onClick={() => fileInputRef.current.click()}
+                                                className="flex-1 md:flex-none px-6 py-3 bg-white border border-gray-200 rounded-xl text-xs font-bold uppercase hover:bg-gray-50 hover:border-blue-300 transition-all text-gray-700 whitespace-nowrap overflow-hidden text-ellipsis"
+                                            >
+                                                {documentForm.selectedFile ? documentForm.selectedFile.name : "Select File"}
+                                            </button>
+                                            <button
+                                                onClick={handleUploadSubmit}
+                                                disabled={uploading}
+                                                className="flex-1 md:flex-none px-8 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-blue-700 transition-all disabled:opacity-50 shadow-lg shadow-blue-100"
+                                            >
+                                                {uploading ? 'Uploading...' : 'Upload'}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    {studentData.documents?.map((doc, idx) => (
-                                        <div key={idx} className="bg-white border border-gray-100 rounded-2xl p-6 flex flex-col gap-6 hover:shadow-md transition-all duration-500 relative border-l-4 border-l-blue-600 shadow-sm">
-                                            {doc.verified && <CheckCircle2 className="w-4 h-4 text-green-500 absolute top-4 right-4" />}
-                                            <div>
-                                                <h6 className="font-black text-gray-900 text-lg truncate leading-none">{doc.documentName}</h6>
-                                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-2">{doc.documentType}</p>
+
+                                {/* Document List */}
+                                <div className="space-y-3">
+                                    <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Uploaded Documents</h4>
+                                    <div className="grid grid-cols-1 gap-3">
+                                        {studentData.documents?.length === 0 && (
+                                            <p className="text-sm text-gray-400 italic">No documents uploaded yet.</p>
+                                        )}
+                                        {studentData.documents?.map((doc, idx) => (
+                                            <div key={idx} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl hover:border-blue-100 transition-all group">
+                                                <div className="flex items-center gap-4 overflow-hidden">
+                                                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
+                                                        <FileText className="w-5 h-5" />
+                                                    </div>
+                                                    <div className="min-w-0">
+                                                        <h6 className="text-sm font-bold text-gray-900 truncate">{doc.documentName}</h6>
+                                                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">{doc.documentType}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-3 shrink-0 ml-2">
+                                                    {doc.verified && (
+                                                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md">
+                                                            <CheckCircle2 className="w-3 h-3" /> VERIFIED
+                                                        </span>
+                                                    )}
+                                                    <a
+                                                        href={doc.documentUrl?.startsWith('http') ? doc.documentUrl : `http://localhost:5000${doc.documentUrl?.startsWith('/') ? '' : '/'}${doc.documentUrl}`}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                        title="View Document"
+                                                    >
+                                                        <Eye className="w-4 h-4" />
+                                                    </a>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => handleDeleteDocument(doc._id, e)}
+                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all relative z-50 cursor-pointer border border-transparent hover:border-red-100"
+                                                        title="Delete Document"
+                                                    >
+                                                        <Trash2 className="w-4 h-4 pointer-events-none" />
+                                                    </button>
+                                                </div>
                                             </div>
-                                            <a href={doc.documentUrl?.startsWith('http') ? doc.documentUrl : `http://localhost:5000${doc.documentUrl?.startsWith('/') ? '' : '/'}${doc.documentUrl}`} target="_blank" rel="noreferrer" className="w-full py-3 bg-gray-50 text-gray-700 rounded-xl font-black text-[10px] uppercase text-center border border-gray-100 hover:bg-gray-100 transition-all">View Document</a>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </section>
-                </div>
+                </div >
             </div >
 
             {/* Notifications */}
@@ -765,6 +1051,72 @@ const StudentProfile = () => {
                     </div>
                 )
             }
+
+            {/* Delete Confirmation Modal */}
+            {deleteId && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
+                        <div className="flex flex-col items-center text-center space-y-4">
+                            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-lg font-bold text-gray-900">Delete Document?</h3>
+                                <p className="text-sm text-gray-500">
+                                    Are you sure you want to delete this document? This action cannot be undone.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                                <button
+                                    onClick={() => setDeleteId(null)}
+                                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmDelete}
+                                    className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
+                                >
+                                    Delete
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Clear Exam Confirmation Modal */}
+            {clearExamType && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
+                        <div className="flex flex-col items-center text-center space-y-4">
+                            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                                <Trash2 className="w-6 h-6 text-red-600" />
+                            </div>
+                            <div className="space-y-2">
+                                <h3 className="text-lg font-bold text-gray-900">Clear Record?</h3>
+                                <p className="text-sm text-gray-500">
+                                    Are you sure you want to clear this {clearExamType.toUpperCase()} record? This action cannot be undone.
+                                </p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                                <button
+                                    onClick={() => setClearExamType(null)}
+                                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={confirmClearExam}
+                                    className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
+                                >
+                                    Clear Record
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div >
     );

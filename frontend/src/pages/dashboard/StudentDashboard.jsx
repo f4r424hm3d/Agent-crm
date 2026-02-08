@@ -181,7 +181,7 @@ const StudentDashboard = () => {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl p-6 border border-gray-200">
+      <div className="bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl p-4 md:p-6 border border-gray-200">
         <h1 className="text-2xl font-bold text-gray-900">
           Welcome back, {profile?.firstName || 'Student'}! 👋
         </h1>

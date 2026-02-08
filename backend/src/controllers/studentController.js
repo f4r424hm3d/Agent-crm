@@ -2,6 +2,8 @@ const Student = require('../models/Student');
 const Agent = require('../models/Agent');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 
 class StudentController {
   /**
@@ -550,7 +552,8 @@ class StudentController {
       }
 
       // Add document to student's documents array
-      const documentUrl = `/uploads/documents/${file.filename}`;
+      // Correct path: /upload/student/documents/filename
+      const documentUrl = `/upload/student/documents/${file.filename}`;
       student.documents.push({
         documentType: document_type,
         documentName: file.originalname,
@@ -579,6 +582,133 @@ class StudentController {
       return res.status(500).json({
         success: false,
         message: 'Failed to upload document',
+        error: error.message
+      });
+    }
+  }
+
+  /**
+   * Delete student document
+   * DELETE /api/students/:id/documents/:documentId
+   */
+  static async deleteDocument(req, res) {
+    try {
+      const { id, documentId } = req.params;
+
+      const student = await Student.findById(id);
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+
+      // Find the document
+      const documentIndex = student.documents.findIndex(doc => doc._id.toString() === documentId);
+
+      if (documentIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      const document = student.documents[documentIndex];
+
+      // Remove from array or use pull
+      student.documents.splice(documentIndex, 1);
+      await student.save();
+
+      // Delete file from filesystem
+      if (document.documentUrl) {
+        // Adjust path resolution based on your project structure
+        // documentUrl is like '/uploads/documents/filename.ext'
+        // We need to resolve it relative to the backend root or public dir
+        // Assuming 'upload' folder is in the root of backend
+        const filePath = path.join(__dirname, '../../', document.documentUrl);
+
+        fs.unlink(filePath, (err) => {
+          if (err) console.error('Error deleting file:', err);
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Document deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete document error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete document',
+        error: error.message
+      });
+    }
+  }
+  /**
+   * Delete current student's own document
+   * DELETE /api/students/me/documents/:documentId
+   */
+  static async deleteMyDocument(req, res) {
+    try {
+      const { documentId } = req.params;
+      const studentId = req.user._id;
+
+      const student = await Student.findById(studentId);
+      if (!student) {
+        return res.status(404).json({
+          success: false,
+          message: 'Student not found'
+        });
+      }
+
+      // Find the document
+      const documentIndex = student.documents.findIndex(doc => doc._id.toString() === documentId);
+
+      if (documentIndex === -1) {
+        return res.status(404).json({
+          success: false,
+          message: 'Document not found'
+        });
+      }
+
+      const document = student.documents[documentIndex];
+
+      // Remove from array or use pull
+      student.documents.splice(documentIndex, 1);
+      await student.save();
+
+      // Delete file from filesystem
+      if (document.documentUrl) {
+        // Robust deletion: check raw filename in standard location or use stored URL
+        const filename = path.basename(document.documentUrl);
+
+        // Try standard location first (fixes legacy wrong URLs)
+        let filePath = path.join(__dirname, '../../upload/student/documents', filename);
+
+        if (!fs.existsSync(filePath)) {
+          // Fallback to stored URL path
+          filePath = path.join(__dirname, '../../', document.documentUrl);
+        }
+
+        if (fs.existsSync(filePath)) {
+          fs.unlink(filePath, (err) => {
+            if (err) console.error('Error deleting file:', err);
+          });
+        } else {
+          console.log("File not found for deletion:", filePath);
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Document deleted successfully'
+      });
+    } catch (error) {
+      console.error('Delete my document error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete document',
         error: error.message
       });
     }
