@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const User = require('../models/User');
+const Agent = require('../models/Agent');
 const { generateSignedToken } = require('../utils/tokenUtils');
 
 /**
@@ -41,15 +42,25 @@ const validateReferral = async (req, res, next) => {
             });
         }
 
-        // Check if user exists in database
-        const referrer = await User.findById(referralId);
+        // Check if user exists in database (check User first, then Agent)
+        let referrer = await User.findById(referralId);
+        let referrerRole = '';
+        let referrerName = '';
 
         if (!referrer) {
-            console.warn(`Referral user not found: ${referralId}`);
-            return res.status(404).json({
-                success: false,
-                message: 'Referral link is invalid or expired'
-            });
+            referrer = await Agent.findById(referralId);
+            if (!referrer) {
+                console.warn(`Referral user/agent not found: ${referralId}`);
+                return res.status(404).json({
+                    success: false,
+                    message: 'Referral link is invalid or expired'
+                });
+            }
+            referrerRole = 'AGENT';
+            referrerName = `${referrer.firstName || ''} ${referrer.lastName || ''}`.trim();
+        } else {
+            referrerRole = referrer.role;
+            referrerName = referrer.name;
         }
 
         // Check if user is active
@@ -65,8 +76,8 @@ const validateReferral = async (req, res, next) => {
         const cookieSecret = process.env.REFERRAL_COOKIE_SECRET || 'default-secret-change-in-production';
         const token = generateSignedToken({
             referralId: referrer._id.toString(),
-            userRole: referrer.role,
-            userName: referrer.name
+            userRole: referrerRole,
+            userName: referrerName
         }, cookieSecret);
 
         // Set HTTP-only cookie
@@ -82,8 +93,8 @@ const validateReferral = async (req, res, next) => {
         // Attach referral info to request for downstream use
         req.referralInfo = {
             id: referrer._id.toString(),
-            role: referrer.role,
-            name: referrer.name
+            role: referrerRole,
+            name: referrerName
         };
 
         next();

@@ -48,18 +48,15 @@ const AgentDetailView = () => {
 
     const handleAction = async () => {
         try {
-            const notes = prompt(`Please provide any notes for this ${confirmAction.type === 'approve' ? 'approval' : 'decline'}:`);
-            if (notes === null) return; // User cancelled
-
             if (confirmAction.type === 'approve') {
-                await agentService.approveAgent(id, { notes });
+                await agentService.approveAgent(id);
                 success('Agent approved successfully! Redirecting to agents list...');
                 // Redirect to agents page after approval
                 setTimeout(() => {
                     navigate('/agents');
                 }, 1500); // 1.5 second delay to show success message
             } else if (confirmAction.type === 'reject') {
-                await agentService.rejectAgent(id, { notes });
+                await agentService.rejectAgent(id);
                 success('Agent application declined.');
                 fetchAgentDetails();
             }

@@ -33,7 +33,7 @@ const Navbar = ({ onMenuClick }) => {
   };
 
   return (
-    <nav className="h-16 bg-white border-b border-gray-200 fixed top-0 right-0 left-0 md:left-64 z-10 transition-all duration-300">
+    <nav className="h-16 bg-white border-b border-gray-200 fixed top-0 right-0 left-0 md:left-72 z-10 transition-all duration-300">
       <div className="h-full px-4 flex items-center justify-between">
         {/* Left side */}
         <div className="flex items-center">

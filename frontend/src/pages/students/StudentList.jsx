@@ -16,6 +16,7 @@ import { setLoading, setStudents, setError } from '../../store/slices/studentSli
 import studentService from '../../services/studentService';
 import agentService from '../../services/agentService';
 import { useToast } from '../../components/ui/toast';
+import { ROLES } from '../../utils/constants';
 
 const StudentList = () => {
     const navigate = useNavigate();
@@ -174,24 +175,25 @@ const StudentList = () => {
                     </div>
 
                     {/* Referrer Role Filter */}
-                    <div className="md:col-span-3">
-                        <div className="relative">
-                            <select
-                                value={filterRole}
-                                onChange={(e) => setFilterRole(e.target.value)}
-                                className="w-full px-6 py-4 bg-white border border-gray-300 rounded-full focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-medium appearance-none shadow-sm cursor-pointer"
-                            >
-                                <option value="All">Referrer Role: All</option>
-                                <option value="Agent">Role: Agents</option>
-                                <option value="Admin">Role: Admins</option>
-                                <option value="Super Admin">Role: Super Admins</option>
-                                <option value="Direct">Role: Direct Entry</option>
-                            </select>
-                            <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                    {(user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.ADMIN) && (
+                        <div className="md:col-span-3">
+                            <div className="relative">
+                                <select
+                                    value={filterRole}
+                                    onChange={(e) => setFilterRole(e.target.value)}
+                                    className="w-full px-6 py-4 bg-white border border-gray-300 rounded-full focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-sm font-medium appearance-none shadow-sm cursor-pointer"
+                                >
+                                    <option value="All">Referrer Role: All</option>
+                                    <option value="Agent">Role: Agents</option>
+                                    <option value="Admin">Role: Admins</option>
+                                    <option value="Super Admin">Role: Super Admins</option>
+                                </select>
+                                <div className="absolute right-5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                                </div>
                             </div>
                         </div>
-                    </div>
+                    )}
 
 
                     {/* From Date */}
@@ -364,10 +366,11 @@ const StudentList = () => {
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">S.No.</th>
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Name</th>
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Contact</th>
-                                    <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Gender</th>
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Nationality</th>
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Country</th>
-                                    <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Referred By</th>
+                                    {(user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.ADMIN) && (
+                                        <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Referred By</th>
+                                    )}
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Registered On</th>
                                     <th className="p-4 text-left font-semibold text-xs uppercase tracking-wider">Actions</th>
                                 </tr>
@@ -398,26 +401,25 @@ const StudentList = () => {
                                             </div>
                                         </td>
                                         <td className="p-4">
-                                            <span className="text-gray-600">{student.gender || 'N/A'}</span>
-                                        </td>
-                                        <td className="p-4">
                                             <span className="text-gray-600">{student.nationality || 'N/A'}</span>
                                         </td>
                                         <td className="p-4">
                                             <span className="text-gray-600">{student.country || 'N/A'}</span>
                                         </td>
-                                        <td className="p-4">
-                                            <div className="flex flex-col">
-                                                <span className="text-gray-800 font-medium">
-                                                    {student.referredByName || 'Direct'}
-                                                </span>
-                                                {student.referredByRole && student.referredByRole !== 'Direct' && student.referredByRole !== 'N/A' && (
-                                                    <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">
-                                                        {student.referredByRole}
+                                        {(user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.ADMIN) && (
+                                            <td className="p-4">
+                                                <div className="flex flex-col">
+                                                    <span className="text-gray-800 font-medium">
+                                                        {student.referredByName || 'Direct'}
                                                     </span>
-                                                )}
-                                            </div>
-                                        </td>
+                                                    {student.referredByRole && student.referredByRole !== 'Direct' && student.referredByRole !== 'N/A' && (
+                                                        <span className="text-[10px] text-indigo-500 font-bold uppercase tracking-wider">
+                                                            {student.referredByRole}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        )}
                                         <td className="p-4">
                                             <span className="text-gray-600">
                                                 {student.createdAt ? new Date(student.createdAt).toLocaleDateString() : 'N/A'}
@@ -427,24 +429,36 @@ const StudentList = () => {
                                             <div className="flex gap-2">
                                                 <button
                                                     onClick={() => navigate(`/students/${student._id || student.id}`)}
-                                                    className="px-3 py-1.5 border border-blue-300 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-600 hover:text-white transition-all"
+                                                    className="px-3 py-1.5 border border-blue-300 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                                     title="View Details"
                                                 >
-                                                    View
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z" />
+                                                        <path fillRule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span className="sr-only">View</span>
                                                 </button>
+
                                                 <button
                                                     onClick={() => navigate(`/students/${student._id || student.id}/edit`)}
-                                                    className="px-3 py-1.5 border border-green-300 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-600 hover:text-white transition-all"
+                                                    className="px-3 py-1.5 border border-green-300 bg-green-50 text-green-700 rounded-lg text-sm font-medium hover:bg-green-600 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                                     title="Edit"
                                                 >
-                                                    Edit
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                                                    </svg>
+                                                    <span className="sr-only">Edit</span>
                                                 </button>
+
                                                 <button
                                                     onClick={() => setDeleteConfirm(student)}
-                                                    className="px-3 py-1.5 border border-red-300 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-600 hover:text-white transition-all"
+                                                    className="px-3 py-1.5 border border-red-300 bg-red-50 text-red-700 rounded-lg text-sm font-medium hover:bg-red-600 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                                     title="Delete"
                                                 >
-                                                    Delete
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                                                    </svg>
+                                                    <span className="sr-only">Delete</span>
                                                 </button>
                                             </div>
                                         </td>

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { NavLink } from "react-router-dom";
-import { useSelector } from "react-redux";
+import { NavLink, useLocation } from "react-router-dom";
+import { useSelector, useDispatch } from "react-redux";
 import {
   FiHome,
   FiUsers,
@@ -17,8 +17,9 @@ import {
   FiSearch,
   FiHeart,
   FiBookOpen,
+  FiChevronDown,
+  FiChevronUp,
 } from "react-icons/fi";
-import { useDispatch } from "react-redux";
 import { logout } from "../../store/slices/authSlice";
 import { ROLES } from "../../utils/constants";
 import {
@@ -38,11 +39,19 @@ const styles = {
   },
 }
 
-
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
   const dispatch = useDispatch();
+  const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [openDropdowns, setOpenDropdowns] = useState({});
+
+  const toggleDropdown = (label) => {
+    setOpenDropdowns((prev) => ({
+      ...prev,
+      [label]: !prev[label],
+    }));
+  };
 
   const handleLogoutConfirm = () => {
     setShowLogoutConfirm(true);
@@ -59,9 +68,15 @@ const Sidebar = ({ isOpen, onClose }) => {
         return [
           { path: "/dashboard", icon: FiHome, label: "Dashboard" },
           { path: "/admins", icon: FiShield, label: "Admins" },
-          { path: "/agents", icon: FiUsers, label: "Agents" },
+          {
+            label: "Agents Management",
+            icon: FiUsers,
+            subItems: [
+              { path: "/agents", label: "All Agents" },
+              { path: "/agent-application", label: "Agent Applications" },
+            ],
+          },
           { path: "/students", icon: FiUserCheck, label: "Students" },
-          { path: "/applications", icon: FiFileText, label: "Applications" },
           { path: "/commissions", icon: FiDollarSign, label: "Commissions" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
           { path: "/staff", icon: FiUsers, label: "Staff Management" },
@@ -74,9 +89,15 @@ const Sidebar = ({ isOpen, onClose }) => {
       case ROLES.ADMIN:
         return [
           { path: "/dashboard", icon: FiHome, label: "Dashboard" },
-          { path: "/agents", icon: FiUsers, label: "Agents" },
+          {
+            label: "Agents Management",
+            icon: FiUsers,
+            subItems: [
+              { path: "/agents", label: "All Agents" },
+              { path: "/agent-application", label: "Agent Applications" },
+            ],
+          },
           { path: "/students", icon: FiUserCheck, label: "Students" },
-          { path: "/applications", icon: FiFileText, label: "Applications" },
           { path: "/commissions", icon: FiDollarSign, label: "Commissions" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
           { path: "/change-password", icon: FiLock, label: "Change Password" },
@@ -86,7 +107,6 @@ const Sidebar = ({ isOpen, onClose }) => {
         return [
           { path: "/dashboard", icon: FiHome, label: "Dashboard" },
           { path: "/students", icon: FiUserCheck, label: "My Students" },
-          { path: "/applications", icon: FiFileText, label: "Applications" },
           { path: "/earnings", icon: FiDollarSign, label: "Earnings" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
           { path: "/change-password", icon: FiLock, label: "Change Password" },
@@ -109,12 +129,16 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const menuItems = getMenuItems();
 
+  const isSubItemActive = (subItems) => {
+    return subItems.some((subItem) => location.pathname === subItem.path);
+  };
+
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-20 md:hidden backdrop-blur-sm transition-opacity"
           onClick={onClose}
         ></div>
       )}
@@ -122,45 +146,96 @@ const Sidebar = ({ isOpen, onClose }) => {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-full bg-primary-600 text-white w-64 transform transition-transform duration-300 z-30
+          fixed top-0 left-0 h-screen bg-primary-600 text-white w-72 transform transition-transform duration-300 ease-in-out z-30
+          flex flex-col shadow-2xl
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
         `}
       >
         {/* Logo */}
-        <div className="h-16 flex items-center px-6 border-b border-primary-500">
-          <h1 style={styles["#custom-h1-class"]} className="text-2xl text-white font-bold">UniAdmit CRM</h1>
+        <div className="h-20 flex items-center px-8 border-b border-primary-500/50 shrink-0">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/10">
+              <span className="text-primary-600 font-black text-xl">U</span>
+            </div>
+            <h1 style={styles["#custom-h1-class"]} className="text-xl font-black tracking-tight text-white uppercase">
+              UniAdmit
+            </h1>
+          </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 px-4 py-6 overflow-y-auto">
-          <ul className="space-y-1">
+        {/* Navigation - Fixed height with scroll */}
+        <nav className="flex-1 px-4 py-8 overflow-y-auto custom-scrollbar">
+          <ul className="space-y-2">
             {menuItems.map((item) => (
               <li key={item.label}>
-                {item.onClick ? (
+                {item.subItems ? (
+                  <div>
+                    <button
+                      onClick={() => toggleDropdown(item.label)}
+                      className={`
+                        w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-200
+                        ${isSubItemActive(item.subItems) || openDropdowns[item.label]
+                          ? "bg-primary-500 text-white font-semibold"
+                          : "text-primary-100 hover:bg-primary-500/50 hover:text-white"
+                        }
+                      `}
+                    >
+                      <div className="flex items-center">
+                        <item.icon size={22} className="mr-3 opacity-90" />
+                        <span className="text-sm tracking-wide">{item.label}</span>
+                      </div>
+                      {openDropdowns[item.label] ? (
+                        <FiChevronUp size={18} className="opacity-70" />
+                      ) : (
+                        <FiChevronDown size={18} className="opacity-70" />
+                      )}
+                    </button>
+                    {openDropdowns[item.label] && (
+                      <ul className="mt-2 ml-6 space-y-1 border-l-2 border-primary-500/50 pl-4">
+                        {item.subItems.map((subItem) => (
+                          <li key={subItem.label}>
+                            <NavLink
+                              to={subItem.path}
+                              className={({ isActive }) =>
+                                `block px-4 py-2 text-sm rounded-lg transition-all duration-200 ${isActive
+                                  ? "bg-white/10 text-white font-bold"
+                                  : "text-primary-100 hover:text-white hover:bg-white/5"
+                                }`
+                              }
+                              onClick={() => window.innerWidth < 1024 && onClose()}
+                            >
+                              {subItem.label}
+                            </NavLink>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : item.onClick ? (
                   <button
                     onClick={() => {
                       item.onClick();
-                      window.innerWidth < 768 && onClose();
+                      window.innerWidth < 1024 && onClose();
                     }}
-                    className="w-full flex items-center px-4 py-3 rounded-lg transition-colors text-primary-100 hover:bg-primary-500"
+                    className="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 text-primary-100 hover:bg-primary-500/50 hover:text-white group"
                   >
-                    <item.icon size={20} className="mr-3" />
-                    <span className="font-medium">{item.label}</span>
+                    <item.icon size={22} className="mr-3 opacity-90 group-hover:scale-110 transition-transform" />
+                    <span className="text-sm font-medium tracking-wide">{item.label}</span>
                   </button>
                 ) : (
                   <NavLink
                     to={item.path}
                     className={({ isActive }) =>
-                      `flex items-center px-4 py-3 rounded-lg transition-colors ${isActive
-                        ? "bg-accent-500 text-white"
-                        : "text-primary-100 hover:bg-primary-500"
+                      `flex items-center px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
+                        ? "bg-accent-500 text-white shadow-lg shadow-accent-500/20 font-semibold"
+                        : "text-primary-100 hover:bg-primary-500/50 hover:text-white"
                       }`
                     }
-                    onClick={() => window.innerWidth < 768 && onClose()}
+                    onClick={() => window.innerWidth < 1024 && onClose()}
                   >
-                    <item.icon size={20} className="mr-3" />
-                    <span className="font-medium">{item.label}</span>
+                    <item.icon size={22} className={`mr-3 transition-transform group-hover:scale-110 ${location.pathname === item.path ? 'opacity-100' : 'opacity-90'}`} />
+                    <span className="text-sm tracking-wide">{item.label}</span>
                   </NavLink>
                 )}
               </li>
@@ -169,16 +244,16 @@ const Sidebar = ({ isOpen, onClose }) => {
         </nav>
 
         {/* User info */}
-        <div className="p-4 border-t border-primary-500">
-          <div className="flex items-center space-x-3">
-            <div className="h-10 w-10 rounded-full bg-primary-400 flex items-center justify-center">
-              <span className="text-sm font-bold">
+        <div className="p-6 border-t border-primary-500/50 bg-primary-700/30">
+          <div className="flex items-center space-x-4">
+            <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10 shadow-inner">
+              <span className="text-lg font-black text-white">
                 {user?.name?.charAt(0).toUpperCase()}
               </span>
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{user?.name}</p>
-              <p className="text-xs text-primary-200 truncate capitalize">
+              <p className="text-sm font-bold text-white truncate">{user?.name}</p>
+              <p className="text-[10px] uppercase font-black tracking-widest text-primary-200 opacity-70 truncate">
                 {user?.role?.replace("_", " ")}
               </p>
             </div>
@@ -188,18 +263,18 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       {/* Logout Confirmation AlertDialog */}
       <AlertDialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <AlertDialogContent>
+        <AlertDialogContent className="rounded-3xl border-none shadow-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirm Logout</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to logout? You'll need to login again to access your account.
+            <AlertDialogTitle className="text-xl font-black text-gray-900">Confirm Logout</AlertDialogTitle>
+            <AlertDialogDescription className="text-gray-600">
+              Are you sure you want to end your session? You'll need credentials to return.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogFooter className="mt-4 gap-2">
+            <AlertDialogCancel className="rounded-xl border-2 px-6">Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleLogout}
-              className="bg-red-600 hover:bg-red-700 focus:ring-red-500"
+              className="bg-red-600 hover:bg-red-700 rounded-xl px-6 font-bold shadow-lg shadow-red-100"
             >
               Logout
             </AlertDialogAction>
@@ -209,6 +284,5 @@ const Sidebar = ({ isOpen, onClose }) => {
     </>
   );
 };
-
 
 export default Sidebar;

@@ -373,11 +373,11 @@ function AppContent() {
           }
         />
 
-        {/* Applications */}
+        {/* Agent Applications */}
         <Route
-          path="applications"
+          path="agent-application"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
               <ApplicationList />
             </ProtectedRoute>
           }
@@ -386,7 +386,7 @@ function AppContent() {
           path="applications/new"
           element={
             <ProtectedRoute
-              allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT]}
+              allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}
             >
               <ApplicationForm />
             </ProtectedRoute>
