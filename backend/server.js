@@ -106,6 +106,7 @@ app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/inquiry', inquiryRoutes);
+app.use('/api/external-search', require('./src/routes/externalApiRoutes'));
 app.use('/api/upload', require('./src/routes/uploadRoutes'));
 
 // Serve static files

@@ -164,7 +164,8 @@ class AgentController {
         'city', 'state', 'pincode', 'country', 'specialization',
         'servicesOffered', 'currentStudents', 'teamSize', 'annualRevenue',
         'partnershipType', 'expectedStudents', 'marketingBudget',
-        'whyPartner', 'references', 'additionalInfo', 'documents'
+        'whyPartner', 'references', 'additionalInfo', 'documents',
+        'accessibleCountries', 'accessibleUniversities'
       ];
 
       // Map snake_case fields to camelCase
@@ -197,7 +198,9 @@ class AgentController {
         why_partner: 'whyPartner',
         references: 'references',
         additional_info: 'additionalInfo',
-        documents: 'documents'
+        documents: 'documents',
+        accessible_countries: 'accessibleCountries',
+        accessible_universities: 'accessibleUniversities'
       };
 
       const updates = {};

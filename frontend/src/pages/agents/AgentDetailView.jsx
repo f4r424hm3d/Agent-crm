@@ -7,6 +7,7 @@ import {
     BarChart3, PieChart, Clock, ExternalLink, Download
 } from 'lucide-react';
 import agentService from '../../services/agentService';
+import externalSearchService from '../../services/externalSearchService';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -361,6 +362,9 @@ const AgentDetailView = () => {
                             )}
                         </div>
 
+                        {/* Search API Access Control Section */}
+                        <AccessControlSection agent={agent} onUpdate={fetchAgentDetails} />
+
                     </div>
                 </div>
 
@@ -404,6 +408,165 @@ const AgentDetailView = () => {
                     </AlertDialogFooter>
                 </AlertDialogContent>
             </AlertDialog>
+        </div>
+    );
+};
+
+const AccessControlSection = ({ agent, onUpdate }) => {
+    const [countries, setCountries] = useState([]);
+    const [universities, setUniversities] = useState([]);
+    const [selectedCountries, setSelectedCountries] = useState(agent.accessibleCountries || []);
+    const [selectedUniversities, setSelectedUniversities] = useState(agent.accessibleUniversities || []);
+    const [loading, setLoading] = useState(false);
+    const [fetchLoading, setFetchLoading] = useState(true);
+    const { success, error } = useToast();
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                setFetchLoading(true);
+                const [countriesData, univsData] = await Promise.all([
+                    externalSearchService.getCountries(),
+                    externalSearchService.getUniversities()
+                ]);
+                setCountries(countriesData.data || countriesData || []);
+                setUniversities(univsData.data || univsData || []);
+            } catch (err) {
+                console.error('Failed to load access control data', err);
+            } finally {
+                setFetchLoading(false);
+            }
+        };
+        loadData();
+    }, []);
+
+    const handleToggleCountry = (countryName) => {
+        setSelectedCountries(prev =>
+            prev.includes(countryName)
+                ? prev.filter(c => c !== countryName)
+                : [...prev, countryName]
+        );
+    };
+
+    const handleToggleUniversity = (univId) => {
+        setSelectedUniversities(prev =>
+            prev.includes(univId.toString())
+                ? prev.filter(id => id !== univId.toString())
+                : [...prev, univId.toString()]
+        );
+    };
+
+    const handleSaveAccess = async () => {
+        try {
+            setLoading(true);
+            await agentService.updateAgent(agent._id, {
+                accessible_countries: selectedCountries,
+                accessible_universities: selectedUniversities
+            });
+            success('Access control updated successfully');
+            if (onUpdate) onUpdate();
+        } catch (err) {
+            error(err.response?.data?.message || 'Failed to update access control');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    if (fetchLoading) return (
+        <div className="bg-white rounded-[2rem] p-8 border border-gray-100 shadow-sm mt-8 animate-pulse">
+            <div className="h-8 bg-gray-100 rounded-xl w-48 mb-4"></div>
+            <div className="h-24 bg-gray-50 rounded-2xl w-full"></div>
+        </div>
+    );
+
+    return (
+        <div className="bg-white rounded-[2rem] p-8 border border-gray-100 shadow-sm mt-8 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50 rounded-full -mr-16 -mt-16 opacity-30"></div>
+
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+                <SectionHeader
+                    icon={Shield}
+                    title="API Access Control"
+                    subtitle="Restrict which countries and universities this agent can access."
+                />
+                <button
+                    onClick={handleSaveAccess}
+                    disabled={loading}
+                    className="px-6 py-2.5 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center disabled:opacity-50"
+                >
+                    {loading ? 'Saving...' : <><Save className="w-4 h-4 mr-2" /> Save Access Rules</>}
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
+                {/* Country Access */}
+                <div className="space-y-4">
+                    <label className="text-xs font-black uppercase tracking-widest text-indigo-400 flex items-center">
+                        <Globe className="w-3.5 h-3.5 mr-2" /> Permitted Countries
+                    </label>
+                    <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {countries.map((country) => (
+                            <button
+                                key={country.name}
+                                onClick={() => handleToggleCountry(country.name)}
+                                className={`flex items-center p-3 rounded-xl border-2 transition-all text-left ${selectedCountries.includes(country.name)
+                                        ? 'border-indigo-600 bg-indigo-50 text-indigo-700'
+                                        : 'border-gray-100 bg-white text-gray-500 hover:border-indigo-100'
+                                    }`}
+                            >
+                                <div className={`w-4 h-4 rounded border-2 mr-3 flex items-center justify-center ${selectedCountries.includes(country.name) ? 'bg-indigo-600 border-indigo-600' : 'border-gray-300'
+                                    }`}>
+                                    {selectedCountries.includes(country.name) && <Check className="w-3 h-3 text-white" />}
+                                </div>
+                                <span className="text-xs font-bold truncate">{country.name}</span>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                {/* University Access */}
+                <div className="space-y-4">
+                    <label className="text-xs font-black uppercase tracking-widest text-indigo-400 flex items-center">
+                        <Building className="w-3.5 h-3.5 mr-2" /> Specific University Access
+                    </label>
+                    <p className="text-[10px] text-gray-400 font-medium italic -mt-2">
+                        Leave unselected to allow access to ALL universities in permitted countries.
+                    </p>
+                    <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                        {universities
+                            .filter(u => selectedCountries.includes(u.country))
+                            .map((univ) => (
+                                <button
+                                    key={univ.id || univ.university_id}
+                                    onClick={() => handleToggleUniversity(univ.id || univ.university_id)}
+                                    className={`flex items-center p-3 rounded-xl border-2 transition-all text-left ${selectedUniversities.includes((univ.id || univ.university_id).toString())
+                                            ? 'border-green-600 bg-green-50 text-green-700'
+                                            : 'border-gray-100 bg-white text-gray-500 hover:border-green-100'
+                                        }`}
+                                >
+                                    <div className={`w-4 h-4 rounded border-2 mr-3 flex items-center justify-center ${selectedUniversities.includes((univ.id || univ.university_id).toString()) ? 'bg-green-600 border-green-600' : 'border-gray-300'
+                                        }`}>
+                                        {selectedUniversities.includes((univ.id || univ.university_id).toString()) && <Check className="w-3 h-3 text-white" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-xs font-bold truncate">{univ.name}</div>
+                                        <div className="text-[10px] opacity-70 font-medium">{univ.city}, {univ.country}</div>
+                                    </div>
+                                </button>
+                            ))}
+                        {selectedCountries.length === 0 && (
+                            <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed text-gray-400 text-xs italic">
+                                Select at least one country to see universities.
+                            </div>
+                        )}
+                        {selectedCountries.length > 0 && universities.filter(u => selectedCountries.includes(u.country)).length === 0 && (
+                            <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed text-gray-400 text-xs italic">
+                                No universities found for selected countries.
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };

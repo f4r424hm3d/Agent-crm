@@ -147,6 +147,16 @@ const agentSchema = new mongoose.Schema({
     }
   ],
 
+  // Access Control for external API data
+  accessibleCountries: [{
+    type: String,
+    trim: true
+  }],
+  accessibleUniversities: [{
+    type: String,
+    trim: true
+  }],
+
   // Stats (denormalized)
   stats: {
     totalStudents: { type: Number, default: 0 },
