@@ -2,8 +2,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directory exists
-const uploadDir = 'uploads/documents/agents';
+// Ensure temp upload directory exists
+const uploadDir = 'uploads/temp';
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }
@@ -14,11 +14,9 @@ const storage = multer.diskStorage({
         cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
-        // Create unique filename: agentId-timestamp-filename
-        // Note: req.params.id might be available if route parameter is defined before middleware
+        // Create unique temp filename
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const sanitizedFilename = file.originalname.replace(/[^a-zA-Z0-9.]/g, '_');
-        cb(null, `agent-doc-${uniqueSuffix}-${sanitizedFilename}`);
+        cb(null, `temp-${uniqueSuffix}${path.extname(file.originalname)}`);
     }
 });
 

@@ -61,6 +61,7 @@ const PartnerApplicationForm = () => {
     });
 
     const [currentStep, setCurrentStep] = useState(1);
+    const [errors, setErrors] = useState({}); // New error state
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSendingOtp, setIsSendingOtp] = useState(false);
     const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
@@ -72,6 +73,10 @@ const PartnerApplicationForm = () => {
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+        // Clear error when user types
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: null }));
+        }
     };
 
     const handleFileUpload = (fieldName, file) => {
@@ -159,10 +164,91 @@ const PartnerApplicationForm = () => {
                 ? [...prev[field], value]
                 : prev[field].filter(item => item !== value)
         }));
+        // Clear error when user selects
+        if (errors[field]) {
+            setErrors(prev => ({ ...prev, [field]: null }));
+        }
+    };
+
+    const validateStep = (step) => {
+        const newErrors = {};
+        let isValid = true;
+
+        if (step === 1) {
+            if (!formData.firstName) newErrors.firstName = "First Name is required";
+            if (!formData.lastName) newErrors.lastName = "Last Name is required";
+            if (!formData.email) newErrors.email = "Email is required";
+            if (!formData.phone) newErrors.phone = "Phone Number is required";
+            if (!formData.qualification) newErrors.qualification = "Qualification is required";
+            if (!formData.designation) newErrors.designation = "Designation is required";
+            if (!formData.experience) newErrors.experience = "Experience is required";
+            if (!isEmailVerified) newErrors.emailVerified = "Please verify your email";
+        }
+
+        if (step === 2) {
+            if (!formData.companyName) newErrors.companyName = "Company Name is required";
+            if (!formData.companyType) newErrors.companyType = "Company Type is required";
+
+            const currentYear = new Date().getFullYear();
+            const year = parseInt(formData.establishedYear);
+            if (!formData.establishedYear) {
+                newErrors.establishedYear = "Year Established is required";
+            } else if (!year || year > currentYear || year < 1900) {
+                newErrors.establishedYear = "Enter a valid year";
+            }
+
+            if (!formData.address) newErrors.address = "Address is required";
+            if (!formData.city) newErrors.city = "City is required";
+            if (!formData.state) newErrors.state = "State is required";
+            if (!formData.pincode) newErrors.pincode = "PIN Code is required";
+        }
+
+        if (step === 3) {
+            if (formData.specialization.length === 0) newErrors.specialization = "Select at least one specialization";
+            if (formData.servicesOffered.length === 0) newErrors.servicesOffered = "Select at least one service";
+            if (!formData.currentStudents) newErrors.currentStudents = "Student Base is required";
+            if (!formData.teamSize) newErrors.teamSize = "Team Size is required";
+        }
+
+        if (step === 4) {
+            if (!formData.partnershipType) newErrors.partnershipType = "Partnership Type is required";
+            if (!formData.expectedStudents) newErrors.expectedStudents = "Students Target is required";
+            if (!formData.whyPartner) newErrors.whyPartner = "This field is required";
+        }
+
+        if (step === 5) {
+            if (!formData.documents.idProof) newErrors.idProof = "ID Proof is required";
+            if (!formData.documents.companyLicence) newErrors.companyLicence = "Company Licence is required";
+            if (!formData.documents.agentPhoto) newErrors.agentPhoto = "Agent Photo is required";
+            if (!formData.documents.companyPhoto) newErrors.companyPhoto = "Company Photo is required";
+        }
+
+        if (step === 6) {
+            if (!formData.termsAccepted) newErrors.termsAccepted = "You must accept the terms";
+            if (!formData.dataConsent) newErrors.dataConsent = "You must provide data consent";
+        }
+
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            isValid = false;
+        } else {
+            setErrors({});
+        }
+
+        return { isValid, newErrors };
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Validate final step
+        const { isValid, newErrors } = validateStep(6);
+        if (!isValid) {
+            const missingFields = Object.values(newErrors);
+            toast.error(missingFields[0] || "Please accept terms and conditions");
+            return;
+        }
+
         if (!isEmailVerified) {
             toast.error("Please verify your email before submitting.");
             return;
@@ -258,7 +344,9 @@ const PartnerApplicationForm = () => {
     };
 
     const nextStep = () => {
-        if (currentStep < totalSteps && isStepValid()) {
+        const { isValid, newErrors } = validateStep(currentStep);
+
+        if (isValid) {
             // Interactive feedback
             const feedback = {
                 1: { title: 'Step 1 Success', next: 'Company details please' },
@@ -273,6 +361,20 @@ const PartnerApplicationForm = () => {
             }
 
             setCurrentStep(currentStep + 1);
+        } else {
+            // Show summary alert
+            const missingFields = Object.values(newErrors);
+            toast.error(
+                <div>
+                    <p className="font-bold">Please fix the following errors:</p>
+                    <ul className="list-disc pl-4 mt-1 text-xs">
+                        {missingFields.slice(0, 3).map((err, idx) => (
+                            <li key={idx}>{err}</li>
+                        ))}
+                        {missingFields.length > 3 && <li>...and {missingFields.length - 3} more</li>}
+                    </ul>
+                </div>
+            );
         }
     };
     const prevStep = () => { if (currentStep > 1) setCurrentStep(currentStep - 1); };
@@ -368,12 +470,14 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">First Name *</label>
                                         <input type="text" required value={formData.firstName} onChange={(e) => handleInputChange('firstName', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="John" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.firstName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="John" />
+                                        {errors.firstName && <p className="text-red-500 text-xs mt-1">{errors.firstName}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Last Name *</label>
                                         <input type="text" required value={formData.lastName} onChange={(e) => handleInputChange('lastName', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="Doe" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.lastName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="Doe" />
+                                        {errors.lastName && <p className="text-red-500 text-xs mt-1">{errors.lastName}</p>}
                                     </div>
                                 </div>
 
@@ -382,7 +486,7 @@ const PartnerApplicationForm = () => {
                                         <label className="text-sm font-semibold text-gray-700">Email Address *</label>
                                         <div className="flex gap-2">
                                             <input type="email" required disabled={isEmailVerified || otpSent} value={formData.email} onChange={(e) => handleInputChange('email', e.target.value)}
-                                                className={`flex-1 px-4 py-3 bg-white border ${isEmailVerified ? 'border-emerald-500 bg-emerald-50' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="john@example.com" />
+                                                className={`flex-1 px-4 py-3 bg-white border ${isEmailVerified ? 'border-emerald-500 bg-emerald-50' : errors.email ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="john@example.com" />
                                             {!isEmailVerified && !otpSent && (
                                                 <button type="button" onClick={handleSendOtp} disabled={isSendingOtp || !formData.email}
                                                     className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-bold hover:bg-emerald-700 disabled:bg-gray-300 transition-colors">
@@ -395,6 +499,8 @@ const PartnerApplicationForm = () => {
                                                 </div>
                                             )}
                                         </div>
+                                        {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+                                        {errors.emailVerified && <p className="text-red-500 text-xs mt-1">{errors.emailVerified}</p>}
                                     </div>
                                     {otpSent && !isEmailVerified && (
                                         <div className="space-y-1.5">
@@ -416,7 +522,8 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Phone Number *</label>
                                         <input type="tel" required value={formData.phone} onChange={(e) => handleInputChange('phone', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="+91 00000 00000" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="+91 00000 00000" />
+                                        {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                                     </div>
                                 </div>
 
@@ -429,7 +536,8 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Highest Qualification *</label>
                                         <input type="text" required value={formData.qualification} onChange={(e) => handleInputChange('qualification', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="e.g. MBA, B.Tech" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.qualification ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="e.g. MBA, B.Tech" />
+                                        {errors.qualification && <p className="text-red-500 text-xs mt-1">{errors.qualification}</p>}
                                     </div>
                                 </div>
 
@@ -437,12 +545,13 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Designation *</label>
                                         <input type="text" required value={formData.designation} onChange={(e) => handleInputChange('designation', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="CEO / Manager" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.designation ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="CEO / Manager" />
+                                        {errors.designation && <p className="text-red-500 text-xs mt-1">{errors.designation}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Years of Experience *</label>
                                         <select required value={formData.experience} onChange={(e) => handleInputChange('experience', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none cursor-pointer">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.experience ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none cursor-pointer`}>
                                             <option value="">Select experience</option>
                                             <option value="1-2 years">1-2 years</option>
                                             <option value="3-5 years">3-5 years</option>
@@ -450,6 +559,7 @@ const PartnerApplicationForm = () => {
                                             <option value="11-15 years">11-15 years</option>
                                             <option value="15+ years">15+ years</option>
                                         </select>
+                                        {errors.experience && <p className="text-red-500 text-xs mt-1">{errors.experience}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -466,14 +576,15 @@ const PartnerApplicationForm = () => {
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-semibold text-gray-700">Legal Company Name *</label>
                                     <input type="text" required value={formData.companyName} onChange={(e) => handleInputChange('companyName', e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="Enter company name" />
+                                        className={`w-full px-4 py-3 bg-white border ${errors.companyName ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="Enter company name" />
+                                    {errors.companyName && <p className="text-red-500 text-xs mt-1">{errors.companyName}</p>}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Company Type *</label>
                                         <select required value={formData.companyType} onChange={(e) => handleInputChange('companyType', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.companyType ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none`}>
                                             <option value="">Select type</option>
                                             <option value="Private Limited">Private Limited</option>
                                             <option value="Public Limited">Public Limited</option>
@@ -482,6 +593,7 @@ const PartnerApplicationForm = () => {
                                             <option value="LLP">LLP</option>
                                             <option value="NGO">NGO / Trust</option>
                                         </select>
+                                        {errors.companyType && <p className="text-red-500 text-xs mt-1">{errors.companyType}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Registration Number</label>
@@ -494,7 +606,8 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Year Established *</label>
                                         <input type="number" required value={formData.establishedYear} onChange={(e) => handleInputChange('establishedYear', e.target.value)}
-                                            className={`w-full px-4 py-3 bg-white border ${formData.establishedYear && (parseInt(formData.establishedYear) > new Date().getFullYear() || parseInt(formData.establishedYear) < 1900) ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-emerald-500'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 text-gray-900 outline-none transition-all`} placeholder="e.g. 2018" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.establishedYear || (formData.establishedYear && (parseInt(formData.establishedYear) > new Date().getFullYear() || parseInt(formData.establishedYear) < 1900)) ? 'border-red-500 focus:border-red-500' : 'border-gray-300 focus:border-emerald-500'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 text-gray-900 outline-none transition-all`} placeholder="e.g. 2018" />
+                                        {errors.establishedYear && <p className="text-red-500 text-xs mt-1">{errors.establishedYear}</p>}
                                         {formData.establishedYear && parseInt(formData.establishedYear) > new Date().getFullYear() && (
                                             <p className="text-[10px] text-red-500 font-bold">Cannot be in the future</p>
                                         )}
@@ -512,27 +625,31 @@ const PartnerApplicationForm = () => {
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-semibold text-gray-700">Office Address *</label>
                                     <textarea required rows={2} value={formData.address} onChange={(e) => handleInputChange('address', e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all resize-none" placeholder="Full business address" />
+                                        className={`w-full px-4 py-3 bg-white border ${errors.address ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all resize-none`} placeholder="Full business address" />
+                                    {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address}</p>}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">City *</label>
                                         <input type="text" required value={formData.city} onChange={(e) => handleInputChange('city', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none" placeholder="City" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.city ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none`} placeholder="City" />
+                                        {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">State *</label>
                                         <select required value={formData.state} onChange={(e) => handleInputChange('state', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.state ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none`}>
                                             <option value="">Select State</option>
                                             {states.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
+                                        {errors.state && <p className="text-red-500 text-xs mt-1">{errors.state}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">PIN Code *</label>
                                         <input type="text" required pattern="[0-9]{6}" value={formData.pincode} onChange={(e) => handleInputChange('pincode', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none" placeholder="6-digit PIN" />
+                                            className={`w-full px-4 py-3 bg-white border ${errors.pincode ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none`} placeholder="6-digit PIN" />
+                                        {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode}</p>}
                                     </div>
                                 </div>
                             </div>
@@ -561,6 +678,7 @@ const PartnerApplicationForm = () => {
                                             </label>
                                         ))}
                                     </div>
+                                    {errors.specialization && <p className="text-red-500 text-xs mt-1">{errors.specialization}</p>}
                                 </div>
 
                                 <div className="space-y-3">
@@ -578,13 +696,14 @@ const PartnerApplicationForm = () => {
                                             </label>
                                         ))}
                                     </div>
+                                    {errors.servicesOffered && <p className="text-red-500 text-xs mt-1">{errors.servicesOffered}</p>}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Student Base *</label>
                                         <select required value={formData.currentStudents} onChange={(e) => handleInputChange('currentStudents', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 text-sm">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.currentStudents ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 text-sm`}>
                                             <option value="">Select range</option>
                                             <option value="1-50">1-50 students</option>
                                             <option value="51-100">51-100 students</option>
@@ -592,11 +711,12 @@ const PartnerApplicationForm = () => {
                                             <option value="251-500">251-500 students</option>
                                             <option value="500+">500+ students</option>
                                         </select>
+                                        {errors.currentStudents && <p className="text-red-500 text-xs mt-1">{errors.currentStudents}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Team Size *</label>
                                         <select required value={formData.teamSize} onChange={(e) => handleInputChange('teamSize', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 text-sm">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.teamSize ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 text-sm`}>
                                             <option value="">Select size</option>
                                             <option value="1-5">1-5 members</option>
                                             <option value="6-10">6-10 members</option>
@@ -604,6 +724,7 @@ const PartnerApplicationForm = () => {
                                             <option value="26-50">26-50 members</option>
                                             <option value="50+">50+ members</option>
                                         </select>
+                                        {errors.teamSize && <p className="text-red-500 text-xs mt-1">{errors.teamSize}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Annual Revenue</label>
@@ -634,24 +755,26 @@ const PartnerApplicationForm = () => {
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Partnership Type *</label>
                                         <select required value={formData.partnershipType} onChange={(e) => handleInputChange('partnershipType', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.partnershipType ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900`}>
                                             <option value="">Select type</option>
                                             <option value="Authorized Representative">Authorized Representative</option>
                                             <option value="Regional Partner">Regional Partner</option>
                                             <option value="Referral Partner">Referral Partner</option>
                                             <option value="Franchise Partner">Franchise Partner</option>
                                         </select>
+                                        {errors.partnershipType && <p className="text-red-500 text-xs mt-1">{errors.partnershipType}</p>}
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Students Target/Year *</label>
                                         <select required value={formData.expectedStudents} onChange={(e) => handleInputChange('expectedStudents', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900">
+                                            className={`w-full px-4 py-3 bg-white border ${errors.expectedStudents ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900`}>
                                             <option value="">Select range</option>
                                             <option value="10-25">10-25 students</option>
                                             <option value="26-50">26-50 students</option>
                                             <option value="51-100">51-100 students</option>
                                             <option value="100+">100+ students</option>
                                         </select>
+                                        {errors.expectedStudents && <p className="text-red-500 text-xs mt-1">{errors.expectedStudents}</p>}
                                     </div>
                                 </div>
 
@@ -677,7 +800,8 @@ const PartnerApplicationForm = () => {
                                 <div className="space-y-1.5">
                                     <label className="text-sm font-semibold text-gray-700">Why do you want to partner with us? *</label>
                                     <textarea required rows={3} value={formData.whyPartner} onChange={(e) => handleInputChange('whyPartner', e.target.value)}
-                                        className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none resize-none" placeholder="Briefly describe your motivation" />
+                                        className={`w-full px-4 py-3 bg-white border ${errors.whyPartner ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none resize-none`} placeholder="Briefly describe your motivation" />
+                                    {errors.whyPartner && <p className="text-red-500 text-xs mt-1">{errors.whyPartner}</p>}
                                 </div>
 
                                 <div className="space-y-1.5">
@@ -726,6 +850,7 @@ const PartnerApplicationForm = () => {
                                                 </button>
                                             )}
                                         </div>
+                                        {errors.idProof && <p className="text-red-500 text-xs mt-1">{errors.idProof}</p>}
                                     </div>
 
                                     {/* Company Licence - REQUIRED */}
@@ -757,6 +882,7 @@ const PartnerApplicationForm = () => {
                                                 </button>
                                             )}
                                         </div>
+                                        {errors.companyLicence && <p className="text-red-500 text-xs mt-1">{errors.companyLicence}</p>}
                                     </div>
 
                                     {/* Agent Photo - REQUIRED */}
@@ -788,6 +914,7 @@ const PartnerApplicationForm = () => {
                                                 </button>
                                             )}
                                         </div>
+                                        {errors.agentPhoto && <p className="text-red-500 text-xs mt-1">{errors.agentPhoto}</p>}
                                     </div>
 
                                     {/* Company Photo - REQUIRED */}
@@ -819,6 +946,7 @@ const PartnerApplicationForm = () => {
                                                 </button>
                                             )}
                                         </div>
+                                        {errors.companyPhoto && <p className="text-red-500 text-xs mt-1">{errors.companyPhoto}</p>}
                                     </div>
 
                                     {/* Identity Document - OPTIONAL */}
@@ -949,18 +1077,20 @@ const PartnerApplicationForm = () => {
 
                                 <div className="space-y-3 pt-2">
                                     <label className="flex items-start cursor-pointer group">
-                                        <input type="checkbox" required checked={formData.termsAccepted} onChange={(e) => handleInputChange('termsAccepted', e.target.checked)} className="mt-1 mr-3 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                        <input type="checkbox" required checked={formData.termsAccepted} onChange={(e) => handleInputChange('termsAccepted', e.target.checked)} className={`mt-1 mr-3 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 ${errors.termsAccepted ? 'ring-2 ring-red-500' : ''}`} />
                                         <span className="text-sm text-gray-600">
                                             I agree to the <Link to="/terms" className="text-emerald-600 font-semibold hover:underline">Terms & Conditions</Link> and certify all info is correct.
                                         </span>
                                     </label>
+                                    {errors.termsAccepted && <p className="text-red-500 text-xs ml-7">{errors.termsAccepted}</p>}
 
                                     <label className="flex items-start cursor-pointer group">
-                                        <input type="checkbox" required checked={formData.dataConsent} onChange={(e) => handleInputChange('dataConsent', e.target.checked)} className="mt-1 mr-3 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+                                        <input type="checkbox" required checked={formData.dataConsent} onChange={(e) => handleInputChange('dataConsent', e.target.checked)} className={`mt-1 mr-3 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 ${errors.dataConsent ? 'ring-2 ring-red-500' : ''}`} />
                                         <span className="text-sm text-gray-600">
                                             I consent to processing my professional data for evaluation.
                                         </span>
                                     </label>
+                                    {errors.dataConsent && <p className="text-red-500 text-xs ml-7">{errors.dataConsent}</p>}
                                 </div>
 
                                 <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-3">
@@ -984,18 +1114,14 @@ const PartnerApplicationForm = () => {
                                 <button
                                     type="button"
                                     onClick={nextStep}
-                                    disabled={!isStepValid()}
-                                    className={`px-8 py-2.5 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2 ${!isStepValid()
-                                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-                                        : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
-                                        }`}>
+                                    className="px-8 py-2.5 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100">
                                     Next Step <ChevronRight size={16} />
                                 </button>
                             ) : (
                                 <button
                                     type="submit"
-                                    disabled={isSubmitting || !isStepValid()}
-                                    className={`px-10 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 ${isSubmitting || !isStepValid()
+                                    disabled={isSubmitting}
+                                    className={`px-10 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 ${isSubmitting
                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
                                         : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'
                                         }`}>

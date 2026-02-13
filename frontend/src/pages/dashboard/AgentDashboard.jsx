@@ -60,8 +60,8 @@ const AgentDashboard = () => {
         const agentData = response.data?.agent || response.agent || response.data || response;
 
         if (agentData) {
-          const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'companyPhoto'];
-          const uploadedDocs = agentData.documents ? Object.keys(agentData.documents) : [];
+          const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'companyPhoto', 'resume'];
+          const uploadedDocs = agentData.documents ? Object.keys(agentData.documents).filter(key => agentData.documents[key]) : [];
           const missing = mandatoryDocs.filter(doc => !uploadedDocs.includes(doc));
           setMissingDocs(missing);
         }

@@ -2,15 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import {
-    User, Building, Mail, Phone, Globe, MapPin, Calendar,
-    Briefcase, Award, Users, TrendingUp, Target, FileText,
-    CheckCircle, XCircle, ArrowLeft, Edit, Shield, Info,
-    BarChart3, PieChart, Clock, ExternalLink, Download, Save, Check,
-    ChevronLeft, Upload, CheckCircle2, X, UserCircle2,
-    Plus, Loader2, Trash2
+    User, Building, Mail, Phone, Globe, MapPin,
+    TrendingUp, Award, FileText, CheckCircle, XCircle, Shield,
+    Clock, ExternalLink, CheckCircle2, UserCircle2, Loader2, AlertCircle, ChevronLeft
 } from 'lucide-react';
 import agentService from '../../services/agentService';
-import externalSearchService from '../../services/externalSearchService';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -22,6 +18,7 @@ import {
     AlertDialogTitle,
 } from '../../components/ui/alert-dialog';
 import { useToast } from '../../components/ui/toast';
+import AgentDocumentUpload from '../../components/agents/AgentDocumentUpload';
 
 const DataField = ({ label, value, type = "text", icon: Icon, mono = false }) => (
     <div className="space-y-1">
@@ -54,17 +51,12 @@ const AgentDetailView = () => {
     const [error, setError] = useState(null);
     const [activeSection, setActiveSection] = useState('overview');
     const [confirmAction, setConfirmAction] = useState({ type: null, isOpen: false });
-    // Upload state
-    const [newDocName, setNewDocName] = useState('');
-    const [newDocFile, setNewDocFile] = useState(null);
-    const [uploadingDoc, setUploadingDoc] = useState(false);
 
     const sectionRefs = {
         overview: useRef(null),
         company: useRef(null),
         business: useRef(null),
         expertise: useRef(null),
-        access: useRef(null),
         documents: useRef(null)
     };
 
@@ -91,14 +83,10 @@ const AgentDetailView = () => {
             if (confirmAction.type === 'approve') {
                 await agentService.approveAgent(id);
                 success('Agent approved successfully!');
-                setTimeout(() => navigate('/agents'), 1500);
+                fetchAgentDetails();
             } else if (confirmAction.type === 'reject') {
                 await agentService.rejectAgent(id);
                 success('Agent application declined.');
-                fetchAgentDetails();
-            } else if (confirmAction.type === 'deleteDocument') {
-                await agentService.deleteDocument(id, confirmAction.data);
-                success('Document deleted successfully');
                 fetchAgentDetails();
             }
         } catch (error) {
@@ -109,72 +97,71 @@ const AgentDetailView = () => {
         }
     };
 
+    const getScrollContainer = () => {
+        return document.querySelector('.h-screen.overflow-y-auto') || window;
+    };
+
     const handleScroll = () => {
-        const scrollPosition = window.scrollY + 200;
+        const container = getScrollContainer();
+        const scrollData = container === window ? window.scrollY : container.scrollTop;
+        const scrollPosition = scrollData + 200;
+
         for (const [section, ref] of Object.entries(sectionRefs)) {
-            if (ref.current &&
-                scrollPosition >= ref.current.offsetTop &&
-                scrollPosition < ref.current.offsetTop + ref.current.offsetHeight) {
-                setActiveSection(section);
-                break;
+            if (ref.current) {
+                const containerRect = container === window ? { top: 0 } : container.getBoundingClientRect();
+                const elementRect = ref.current.getBoundingClientRect();
+                const relativeTop = elementRect.top - containerRect.top;
+
+                if (relativeTop <= 200 && relativeTop > -ref.current.offsetHeight) {
+                    setActiveSection(section);
+                    break;
+                }
             }
         }
     };
 
     useEffect(() => {
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+        const container = getScrollContainer();
+        container.addEventListener('scroll', handleScroll);
+        handleScroll();
+        return () => container.removeEventListener('scroll', handleScroll);
     }, []);
 
     const scrollToSection = (sectionId) => {
         const element = sectionRefs[sectionId].current;
-        if (element) {
+        const container = getScrollContainer();
+
+        if (element && container) {
             const offset = 100;
-            const elementPosition = element.getBoundingClientRect().top;
-            const offsetPosition = elementPosition + window.pageYOffset - offset;
-            window.scrollTo({ top: offsetPosition, behavior: "smooth" });
-        }
-    };
-
-    const handleFileSelect = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("File size must be less than 5MB");
-                return;
+            if (container !== window) {
+                const containerRect = container.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                const targetScroll = container.scrollTop + (elementRect.top - containerRect.top) - offset;
+                container.scrollTo({
+                    top: targetScroll,
+                    behavior: "smooth"
+                });
+            } else {
+                const elementPosition = element.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - offset;
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: "smooth"
+                });
             }
-            setNewDocFile(file);
         }
     };
 
-    const handleUploadDocument = async () => {
-        if (!newDocName || !newDocFile) {
-            toast.error('Please provide both document name and file');
-            return;
+    const [missingDocs, setMissingDocs] = useState([]);
+
+    useEffect(() => {
+        if (agent) {
+            const requiredDocs = ['idProof', 'companyLicence', 'agentPhoto', 'companyPhoto', 'identityDocument', 'companyRegistration', 'resume'];
+            const uploadedDocs = agent.documents ? Object.keys(agent.documents).filter(k => agent.documents[k]) : [];
+            const missing = requiredDocs.filter(doc => !uploadedDocs.includes(doc));
+            setMissingDocs(missing);
         }
-
-        setUploadingDoc(true);
-        const formData = new FormData();
-        formData.append('documentName', newDocName);
-        formData.append('file', newDocFile);
-
-        try {
-            await agentService.uploadDocument(id, formData);
-            toast.success('Document uploaded successfully!');
-            setNewDocName('');
-            setNewDocFile(null);
-            fetchAgentDetails();
-        } catch (error) {
-            console.error('Upload failed:', error);
-            toast.error(error.response?.data?.message || 'Failed to upload document');
-        } finally {
-            setUploadingDoc(false);
-        }
-    };
-
-    const handleDeleteDocument = (docName) => {
-        setConfirmAction({ type: 'deleteDocument', isOpen: true, data: docName });
-    };
+    }, [agent]);
 
     if (loading && !agent) {
         return (
@@ -212,73 +199,83 @@ const AgentDetailView = () => {
         }
     };
 
+
+
     return (
-        <div className="min-h-screen bg-gray-50/50 pb-20">
-            {/* Sticky Header */}
-            <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-200 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/agents')} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-                            <ChevronLeft className="w-5 h-5 text-gray-600" />
+        <div className="max-w-[1500px] mx-auto space-y-10 pb-20">
+            {/* Top Bar */}
+            <div className="flex items-center justify-between pb-2 pt-6 px-6">
+                <button
+                    onClick={() => navigate('/agents')}
+                    className="flex items-center gap-3 px-6 py-3 bg-white text-gray-700 rounded-2xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-black text-sm"
+                >
+                    <ChevronLeft className="w-5 h-5" />
+                    Back
+                </button>
+                <div className="flex items-center gap-3">
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(agent?.approvalStatus)}`}>
+                        {agent?.approvalStatus === 'approved' && <CheckCircle2 className="w-3 h-3" />}
+                        {agent?.approvalStatus === 'pending' && <Clock className="w-3 h-3" />}
+                        {(agent?.approvalStatus || 'pending').toUpperCase()}
+                    </span>
+                </div>
+            </div>
+
+            {/* Sticky Navigation */}
+            <div className="">
+                <div className="bg-white/90 p-1.5 rounded-2xl border border-gray-200 shadow-xl shadow-gray-200/50 max-w-4xl mx-auto flex overflow-x-auto no-scrollbar gap-1">
+                    {[
+                        { id: 'overview', label: 'Overview' },
+                        { id: 'company', label: 'Company' },
+                        { id: 'business', label: 'Metrics' },
+                        { id: 'expertise', label: 'Expertise' },
+                        { id: 'documents', label: 'Documents' },
+                    ].map((item) => (
+                        <button
+                            key={item.id}
+                            onClick={() => scrollToSection(item.id)}
+                            className={`whitespace-nowrap flex-1 px-6 py-3 rounded-xl text-sm font-black transition-all ${activeSection === item.id
+                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-100 scale-105'
+                                : 'text-gray-500 hover:bg-blue-50 hover:text-blue-600'
+                                }`}
+                        >
+                            {item.label}
                         </button>
-                        <div>
-                            <h1 className="text-lg font-bold text-gray-900 truncate max-w-[200px] md:max-w-none">
-                                {agent.firstName} {agent.lastName}
-                            </h1>
-                            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">{agent.companyName}</p>
-                        </div>
-                    </div>
-
-                    <div className="hidden lg:flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-                        {[
-                            { id: 'overview', label: 'Identity', icon: User },
-                            { id: 'company', label: 'Company', icon: Building },
-                            { id: 'business', label: 'Metrics', icon: TrendingUp },
-                            { id: 'expertise', label: 'Expertise', icon: Award },
-                            { id: 'access', label: 'API Access', icon: Shield },
-                            { id: 'documents', label: 'Docs', icon: FileText },
-                        ].map((item) => (
-                            <button
-                                key={item.id}
-                                onClick={() => scrollToSection(item.id)}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${activeSection === item.id ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-gray-200/50'}`}
-                            >
-                                <item.icon className="w-3.5 h-3.5" />
-                                {item.label}
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="flex items-center gap-3">
-                        {agent.approvalStatus === 'pending' && (
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => setConfirmAction({ type: 'approve', isOpen: true })}
-                                    className="px-4 py-1.5 bg-green-600 text-white rounded-lg text-xs font-bold hover:bg-green-700 shadow-sm flex items-center gap-2"
-                                >
-                                    <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                                </button>
-                                <button
-                                    onClick={() => setConfirmAction({ type: 'reject', isOpen: true })}
-                                    className="px-4 py-1.5 bg-white border border-red-100 text-red-600 rounded-lg text-xs font-bold hover:bg-red-50 flex items-center gap-2"
-                                >
-                                    <XCircle className="w-3.5 h-3.5" /> Reject
-                                </button>
-                            </div>
-                        )}
-                        <span className={`px-3 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${getStatusColor(agent.approvalStatus || 'pending')}`}>
-                            {agent.approvalStatus || 'PENDING'}
-                        </span>
-                    </div>
+                    ))}
                 </div>
             </div>
 
             <main className="max-w-7xl mx-auto px-4 py-8">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {missingDocs.length > 0 && (
+                    <div className="mb-8 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="p-2 bg-amber-100 rounded-full text-amber-600 shrink-0">
+                            <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h4 className="text-lg font-bold text-amber-900 mb-1">Action Required: Missing Documents</h4>
+                            <p className="text-sm text-amber-700 mb-2">The following documents are missing for this agent. Please upload them to complete the profile.</p>
+                            <div className="flex flex-wrap gap-2">
+                                {missingDocs.map(doc => (
+                                    <span key={doc} className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-md border border-amber-200 capitalize">
+                                        {doc.replace(/([A-Z])/g, ' $1').trim()}
+                                    </span>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('documents')}
+                                className="mt-3 text-sm font-bold text-amber-800 hover:text-amber-900 underline decoration-2 underline-offset-2"
+                            >
+                                Go to Documents Section &rarr;
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     {/* Left Profile Card */}
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden sticky top-24">
-                            <div className="h-32 bg-blue-600 relative overflow-hidden">
+                    <div className="lg:col-span-4 space-y-6 sticky top-20">
+                        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                            <div className="h-32 bg-gradient-to-br from-blue-600 to-indigo-700 relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
                             </div>
                             <div className="px-6 pb-8 relative text-center">
@@ -346,8 +343,57 @@ const AgentDetailView = () => {
                     {/* Right Content */}
                     <div className="lg:col-span-8 space-y-8">
                         {/* Section: Overview */}
-                        <div ref={sectionRefs.overview} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-                            <SectionHeader title="Agent Identity" icon={User} />
+                        <div ref={sectionRefs.overview} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                            <SectionHeader title="Overview" icon={User} />
+
+                            {/* Admin Controls Card */}
+                            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                                <div className="p-6 border-b border-gray-100">
+                                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-2xl p-6">
+                                        <div className="flex items-center justify-between mb-4">
+                                            <h4 className="text-sm font-black text-gray-800 flex items-center gap-2">
+                                                <Shield className="w-4 h-4 text-blue-600" />
+                                                Administrative Controls
+                                            </h4>
+                                            <span className={`px-3 py-1 rounded-full text-[10px] font-black border uppercase tracking-widest ${getStatusColor(agent.approvalStatus || 'pending')}`}>
+                                                {agent.approvalStatus || 'PENDING'}
+                                            </span>
+                                        </div>
+
+                                        {agent.approvalStatus === 'pending' && (
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => setConfirmAction({ type: 'approve', isOpen: true })}
+                                                    className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl text-sm font-bold hover:bg-green-700 shadow-sm flex items-center justify-center gap-2 transition-all"
+                                                >
+                                                    <CheckCircle2 className="w-4 h-4" /> Approve Agent
+                                                </button>
+                                                <button
+                                                    onClick={() => setConfirmAction({ type: 'reject', isOpen: true })}
+                                                    className="flex-1 px-4 py-2.5 bg-white border-2 border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-50 flex items-center justify-center gap-2 transition-all"
+                                                >
+                                                    <XCircle className="w-4 h-4" /> Reject Application
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {agent.approvalStatus === 'approved' && (
+                                            <div className="bg-white/50 rounded-xl p-4 text-center">
+                                                <CheckCircle className="w-8 h-8 text-green-600 mx-auto mb-2" />
+                                                <p className="text-sm font-bold text-gray-700">This agent has been approved and is active.</p>
+                                            </div>
+                                        )}
+
+                                        {(agent.approvalStatus === 'rejected' || agent.approvalStatus === 'declined') && (
+                                            <div className="bg-white/50 rounded-xl p-4 text-center">
+                                                <XCircle className="w-8 h-8 text-red-600 mx-auto mb-2" />
+                                                <p className="text-sm font-bold text-gray-700">This application has been rejected.</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <DataField label="First Name" value={agent.firstName} />
                                 <DataField label="Last Name" value={agent.lastName} />
@@ -407,7 +453,7 @@ const AgentDetailView = () => {
                         </div>
 
                         {/* Section: Expertise */}
-                        <div ref={sectionRefs.expertise} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
+                        <div ref={sectionRefs.expertise} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                             <SectionHeader title="Expertise Areas" icon={Award} />
                             <div className="p-8 space-y-8">
                                 <div>
@@ -433,144 +479,17 @@ const AgentDetailView = () => {
                             </div>
                         </div>
 
-                        {/* Section: Access Control */}
-                        <div ref={sectionRefs.access}>
-                            <AccessControlSection agent={agent} onUpdate={fetchAgentDetails} />
-                        </div>
+
 
                         {/* Section: Documents */}
-                        <div ref={sectionRefs.documents} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-                            <SectionHeader title="Verification Vault" icon={FileText} />
-
-                            {/* Admin Upload Section */}
-                            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                                <div className="p-6 border-b border-gray-100">
-                                    <div className="border-2 border-dashed border-blue-200 rounded-2xl p-6 bg-blue-50/30">
-                                        <h4 className="text-sm font-black text-gray-800 mb-4 flex items-center gap-2">
-                                            <Upload className="w-4 h-4 text-blue-600" />
-                                            Upload New Document
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
-                                                    Document Name
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    placeholder="e.g. Award Certificate, License"
-                                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                                    value={newDocName}
-                                                    onChange={(e) => setNewDocName(e.target.value)}
-                                                />
-                                            </div>
-                                            <div>
-                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
-                                                    Select File
-                                                </label>
-                                                <input
-                                                    type="file"
-                                                    accept=".pdf,.jpg,.jpeg,.png"
-                                                    onChange={handleFileSelect}
-                                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                                />
-                                            </div>
-                                        </div>
-                                        <button
-                                            onClick={handleUploadDocument}
-                                            disabled={uploadingDoc || !newDocName || !newDocFile}
-                                            className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                        >
-                                            {uploadingDoc ? (
-                                                <>
-                                                    <Loader2 className="w-4 h-4 animate-spin" />
-                                                    Uploading...
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Save className="w-4 h-4" />
-                                                    Save Document
-                                                </>
-                                            )}
-                                        </button>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Documents List */}
+                        <div ref={sectionRefs.documents} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                            <SectionHeader title="Documents" icon={FileText} />
                             <div className="p-8">
-                                {/* Mandatory Documents Info */}
-                                <div className="mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-100">
-                                    <p className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-2">
-                                        <Info className="w-4 h-4" />
-                                        Required Documents for Verification
-                                    </p>
-                                    <p className="text-[10px] text-blue-600 leading-relaxed">
-                                        <strong>Mandatory:</strong> ID Proof, Company Licence, Agent Photo, Identity Document, Company Registration, Company Photo
-                                    </p>
-                                </div>
-
-                                {(() => {
-                                    // Filter out null/empty documents
-                                    const validDocs = agent.documents ? Object.entries(agent.documents).filter(([key, url]) => url && url.trim() !== '') : [];
-
-                                    return validDocs.length > 0 ? (
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            {validDocs.map(([key, url]) => {
-                                                // Construct full URL for documents
-                                                // Static files are served from backend root, not /api route
-                                                const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-                                                const fullUrl = url?.startsWith('http') ? url : `${backendUrl}/${url}`;
-
-                                                return (
-                                                    <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group hover:border-blue-200 transition-all">
-                                                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                                                            <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-blue-600 flex-shrink-0">
-                                                                <FileText className="w-5 h-5" />
-                                                            </div>
-                                                            <div className="min-w-0 flex-1">
-                                                                <p className="text-xs font-black text-gray-700 capitalize truncate">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-                                                                <p className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">Verified File</p>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-1 flex-shrink-0">
-                                                            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
-                                                                <button
-                                                                    onClick={() => handleDeleteDocument(key)}
-                                                                    className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
-                                                                    title="Delete Document"
-                                                                >
-                                                                    <Trash2 className="w-3.5 h-3.5" />
-                                                                </button>
-                                                            )}
-                                                            <a
-                                                                href={fullUrl}
-                                                                target="_blank"
-                                                                rel="noopener noreferrer"
-                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                                title="View Document"
-                                                            >
-                                                                <ExternalLink className="w-3.5 h-3.5" />
-                                                            </a>
-                                                            <a
-                                                                href={fullUrl}
-                                                                download
-                                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
-                                                                title="Download Document"
-                                                            >
-                                                                <Download className="w-3.5 h-3.5" />
-                                                            </a>
-                                                        </div>
-                                                    </div>
-                                                );
-                                            })}
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-12 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                                            <Info className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                            <p className="text-gray-400 font-bold text-sm italic">No digital documents uploaded.</p>
-                                        </div>
-                                    );
-                                })()}
+                                <AgentDocumentUpload
+                                    agent={agent}
+                                    onUploadSuccess={() => fetchAgentDetails()}
+                                    isAdmin={true}
+                                />
                             </div>
                         </div>
 
@@ -588,21 +507,21 @@ const AgentDetailView = () => {
                         </div>
                     </div>
                 </div>
-            </main >
+            </main>
 
             {/* Alert Dialog */}
-            < AlertDialog open={confirmAction.isOpen} onOpenChange={(isOpen) => setConfirmAction(prev => ({ ...prev, isOpen }))}>
+            <AlertDialog open={confirmAction.isOpen} onOpenChange={(isOpen) => setConfirmAction(prev => ({ ...prev, isOpen }))}>
                 <AlertDialogContent className="rounded-3xl p-8 border-none shadow-2xl">
                     <AlertDialogHeader>
                         <AlertDialogTitle className="text-2xl font-black text-gray-900 mb-2">
-                            {confirmAction.type === 'deleteDocument' ? 'Delete Document?' : 'Final Confirmation'}
+                            {confirmAction.type === 'approve' || confirmAction.type === 'reject' ? 'Final Confirmation' : 'Confirm Action'}
                         </AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-600">
                             {confirmAction.type === 'approve'
                                 ? "You're about to approve this agent. An official welcome email with login credentials will be sent."
                                 : confirmAction.type === 'reject'
                                     ? "Are you certain you want to reject this partnership?"
-                                    : `Are you sure you want to permanently delete "${confirmAction.data}"? This action cannot be undone.`}
+                                    : "Are you sure you want to proceed?"}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="mt-8 gap-4">
@@ -618,132 +537,11 @@ const AgentDetailView = () => {
                                 ? 'Confirm Approval'
                                 : confirmAction.type === 'reject'
                                     ? 'Confirm Rejection'
-                                    : 'Yes, Delete'}
+                                    : 'Confirm'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog >
-        </div >
-    );
-};
-
-const AccessControlSection = ({ agent, onUpdate }) => {
-    const [countries, setCountries] = useState([]);
-    const [universities, setUniversities] = useState([]);
-    const [selectedCountries, setSelectedCountries] = useState(agent.accessibleCountries || []);
-    const [selectedUniversities, setSelectedUniversities] = useState(agent.accessibleUniversities || []);
-    const [loading, setLoading] = useState(false);
-    const [fetchLoading, setFetchLoading] = useState(true);
-    const { success, error } = useToast();
-
-    useEffect(() => {
-        const loadData = async () => {
-            try {
-                setFetchLoading(true);
-                const [countriesData, univsData] = await Promise.all([
-                    externalSearchService.getCountries(),
-                    externalSearchService.getUniversities()
-                ]);
-                setCountries(countriesData.data || countriesData || []);
-                setUniversities(univsData.data || univsData || []);
-            } catch (err) {
-                console.error('Failed to load access control data', err);
-            } finally {
-                setFetchLoading(false);
-            }
-        };
-        loadData();
-    }, []);
-
-    const handleToggleCountry = (countryName) => {
-        setSelectedCountries(prev => prev.includes(countryName) ? prev.filter(c => c !== countryName) : [...prev, countryName]);
-    };
-
-    const handleToggleUniversity = (univId) => {
-        setSelectedUniversities(prev => prev.includes(univId.toString()) ? prev.filter(id => id !== univId.toString()) : [...prev, univId.toString()]);
-    };
-
-    const handleSaveAccess = async () => {
-        try {
-            setLoading(true);
-            await agentService.updateAgent(agent._id, {
-                accessible_countries: selectedCountries,
-                accessible_universities: selectedUniversities
-            });
-            success('Access control updated successfully');
-            if (onUpdate) onUpdate();
-        } catch (err) {
-            error(err.response?.data?.message || 'Failed to update access control');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    if (fetchLoading) return (
-        <div className="bg-white rounded-3xl p-8 border border-gray-100 shadow-sm animate-pulse h-48"></div>
-    );
-
-    return (
-        <div className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gray-100/50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                    <Shield className="text-blue-600 w-5 h-5" />
-                    API Access Control
-                </h3>
-                <button
-                    onClick={handleSaveAccess}
-                    disabled={loading}
-                    className="px-4 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-2"
-                >
-                    <Save className="w-3.5 h-3.5" /> {loading ? 'Saving...' : 'Save Rules'}
-                </button>
-            </div>
-            <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-2">
-                        <Globe className="w-3.5 h-3.5" /> Permitted Countries
-                    </label>
-                    <div className="grid grid-cols-1 gap-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                        {countries.map((country) => (
-                            <button
-                                key={country.name}
-                                onClick={() => handleToggleCountry(country.name)}
-                                className={`flex items-center p-3 rounded-xl border transition-all text-left ${selectedCountries.includes(country.name) ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-100 bg-white text-gray-500'}`}
-                            >
-                                <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center ${selectedCountries.includes(country.name) ? 'bg-blue-600 border-blue-600' : 'border-gray-300'}`}>
-                                    {selectedCountries.includes(country.name) && <Check className="w-3 h-3 text-white" />}
-                                </div>
-                                <span className="text-xs font-bold">{country.name}</span>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-blue-400 flex items-center gap-2">
-                        <Building className="w-3.5 h-3.5" /> Specific Universities
-                    </label>
-                    <div className="grid grid-cols-1 gap-2 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                        {universities
-                            .filter(u => selectedCountries.includes(u.country))
-                            .map((univ) => (
-                                <button
-                                    key={univ.id || univ.university_id}
-                                    onClick={() => handleToggleUniversity(univ.id || univ.university_id)}
-                                    className={`flex items-center p-3 rounded-xl border transition-all text-left ${selectedUniversities.includes((univ.id || univ.university_id).toString()) ? 'border-emerald-600 bg-emerald-50 text-emerald-700' : 'border-gray-100 bg-white text-gray-500'}`}
-                                >
-                                    <div className={`w-4 h-4 rounded border mr-3 flex items-center justify-center ${selectedUniversities.includes((univ.id || univ.university_id).toString()) ? 'bg-emerald-600 border-emerald-600' : 'border-gray-300'}`}>
-                                        {selectedUniversities.includes((univ.id || univ.university_id).toString()) && <Check className="w-3 h-3 text-white" />}
-                                    </div>
-                                    <div className="min-w-0">
-                                        <p className="text-xs font-bold truncate">{univ.name}</p>
-                                        <p className="text-[9px] opacity-70 font-bold">{univ.country}</p>
-                                    </div>
-                                </button>
-                            ))}
-                    </div>
-                </div>
-            </div>
+            </AlertDialog>
         </div>
     );
 };

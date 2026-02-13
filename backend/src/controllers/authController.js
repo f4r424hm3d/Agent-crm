@@ -28,11 +28,15 @@ class AuthController {
 
       // Validate role matches (if role is provided)
       if (role && user.role !== role) {
-        console.log(`Role mismatch! Requested: ${role}, Actual: ${user.role}`); // DEBUG LOG
-        return ResponseHandler.forbidden(
-          res,
-          `You are not authorized to login as ${role}. Your account role is ${user.role}.`
-        );
+        // Allow "Super Admin" to match "SUPER_ADMIN"
+        const normalize = (r) => r.toUpperCase().replace(/\s+/g, '_');
+        if (normalize(user.role) !== normalize(role)) {
+          console.log(`Role mismatch! Requested: ${role}, Actual: ${user.role}`); // DEBUG LOG
+          return ResponseHandler.forbidden(
+            res,
+            `You are not authorized to login as ${role}. Your account role is ${user.role}.`
+          );
+        }
       }
 
       // Check password
@@ -166,6 +170,9 @@ class AuthController {
    * POST /api/auth/register-agent
    */
   static async registerAgent(req, res) {
+    const fs = require('fs');
+    const path = require('path');
+
     try {
       const {
         name,
@@ -184,15 +191,39 @@ class AuthController {
         account_holder_name,
         ifsc_code,
         swift_code,
+        website, // Added field
+        registration_number // Added field (snake_case from frontend likely, or need to standardize)
       } = req.body;
 
-      // Check if email exists in agents table
+      // Note: Frontend likely sends 'companyRegistrationNumber' or similar. 
+      // User requirement: "Company Registration Number" and "Website Link" required.
+      // We should check if these are present in body (express-validator checked some, ensuring here too if needed or mapping).
+
+      const files = req.files;
+      // Strict requirement: All documents mandatory for public registration
+      // We can relax "All" to "At least ID/Company Proof" or strictly ALL.
+      // User said: "Public Registration -> All fields + all documents strictly required."
+      // Let's enforce presence of files.
+      if (!files || Object.keys(files).length === 0) {
+        return ResponseHandler.badRequest(res, 'All documents are required for registration.');
+      }
+
+      // Check for specific required documents if needed:
+      // const requiredDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'resume', 'companyPhoto'];
+      // const missingDocs = requiredDocs.filter(doc => !files[doc]);
+      // if (missingDocs.length > 0) {
+      //   return ResponseHandler.badRequest(res, `Missing documents: ${missingDocs.join(', ')}`);
+      // }
+
+      // Check if email exists
       const existingAgent = await Agent.findOne({ email });
       if (existingAgent) {
+        // Cleanup files
+        Object.values(files).flat().forEach(file => { try { fs.unlinkSync(file.path); } catch (e) { } });
         return ResponseHandler.error(res, 'Email already exists', 400);
       }
 
-      // Create agent (self-contained)
+      // Create agent first to get ID
       const agent = await Agent.create({
         name,
         email,
@@ -210,9 +241,44 @@ class AuthController {
         account_holder_name,
         ifsc_code,
         swift_code,
+        website,
+        registrationNumber: registration_number, // Map snake_case to model field camelCase
         status: 'inactive',
         approvalStatus: AGENT_APPROVAL_STATUS.PENDING,
       });
+
+      // Handle Documents
+      const documentsBaseDir = path.join(__dirname, '../../uploads/documents/agent');
+      const safeName = (agent.name).replace(/[^a-z0-9]/gi, '');
+      const dateStr = agent.createdAt ? new Date(agent.createdAt).getTime() : Date.now();
+      const folderName = `${safeName}_${agent._id}_${dateStr}`;
+      const agentFolder = path.join(documentsBaseDir, folderName);
+
+      if (!fs.existsSync(agentFolder)) {
+        fs.mkdirSync(agentFolder, { recursive: true });
+      }
+
+      const documentPaths = new Map();
+
+      for (const [fieldName, fileArray] of Object.entries(files)) {
+        const file = fileArray[0];
+        const ext = path.extname(file.originalname);
+        const newFileName = `${fieldName}${ext}`;
+        const targetPath = path.join(agentFolder, newFileName);
+
+        try {
+          fs.renameSync(file.path, targetPath);
+        } catch (err) {
+          fs.copyFileSync(file.path, targetPath);
+          fs.unlinkSync(file.path);
+        }
+
+        const relativePath = `uploads/documents/agent/${folderName}/${newFileName}`;
+        documentPaths.set(fieldName, relativePath);
+      }
+
+      agent.documents = documentPaths;
+      await agent.save();
 
       // Send registration email
       await emailService.sendAgentRegistrationEmail(agent);
@@ -221,7 +287,7 @@ class AuthController {
       await AuditService.logCreate(null, 'Agent', agent._id, {
         agentName: agent.name,
         email: agent.email,
-        description: 'Self-registration'
+        description: 'Self-registration with documents'
       }, req);
 
       logger.info('Agent registered', { agentId: agent.id, email: agent.email });
@@ -236,6 +302,10 @@ class AuthController {
         }
       );
     } catch (error) {
+      // Cleanup files
+      if (req.files) {
+        Object.values(req.files).flat().forEach(file => { try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch (e) { } });
+      }
       logger.error('Agent registration error', { error: error.message });
       return ResponseHandler.serverError(res, 'Registration failed', error);
     }

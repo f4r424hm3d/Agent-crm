@@ -140,7 +140,7 @@ const RoleSelection = () => {
                 role: account.role
             });
             dispatch(loginSuccess(response));
-            toast.success(`Logged in as ${account.label}`);
+            toast.success(`Permission Granted! Welcome to the ${account.label} Portal.`);
             navigate('/dashboard');
         } catch (err) {
             console.error("Direct login error:", err);

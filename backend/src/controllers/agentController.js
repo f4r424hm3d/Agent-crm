@@ -1,4 +1,5 @@
 const { Agent, User, Student, Application } = require('../models');
+const { moveFileToAgentFolder } = require('../services/storageService');
 const ResponseHandler = require('../utils/responseHandler');
 const AuditService = require('../services/auditService');
 const emailService = require('../services/emailService');
@@ -269,6 +270,28 @@ class AgentController {
       const agent = await Agent.findById(id);
       if (!agent) {
         return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Delete associated physical documents
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const UPLOADS_BASE = 'uploads/documents/agents';
+        const uploadsDir = path.join(process.cwd(), UPLOADS_BASE);
+
+        if (fs.existsSync(uploadsDir)) {
+          const folders = fs.readdirSync(uploadsDir);
+          folders.forEach(folder => {
+            // Folder naming convention: name_id_date (e.g. ritik_saini_65c3fd..._2024-02-13)
+            if (folder.includes(`_${agent._id.toString()}_`)) {
+              const folderPath = path.join(uploadsDir, folder);
+              fs.rmSync(folderPath, { recursive: true, force: true });
+            }
+          });
+        }
+      } catch (fileError) {
+        logger.error('Failed to delete agent documents', { error: fileError.message, agentId: id });
+        // Continue with agent deletion even if file deletion fails
       }
 
       await agent.deleteOne();
@@ -596,23 +619,32 @@ class AgentController {
         return ResponseHandler.badRequest(res, 'No file uploaded');
       }
 
+      // Helper to clean up temp file
+      const cleanupTemp = () => {
+        if (file && fs.existsSync(file.path)) {
+          fs.unlinkSync(file.path);
+        }
+      };
+
       if (!documentName) {
-        // Remove uploaded file if validation fails
-        const fs = require('fs');
-        fs.unlinkSync(file.path);
+        cleanupTemp();
         return ResponseHandler.badRequest(res, 'Document name is required');
       }
 
       const agent = await Agent.findById(id);
       if (!agent) {
-        // Remove uploaded file
-        const fs = require('fs');
-        fs.unlinkSync(file.path);
+        cleanupTemp();
         return ResponseHandler.notFound(res, 'Agent not found');
       }
 
+      // Use storage service to move file
+      const relativePath = moveFileToAgentFolder(file, agent, documentName);
+
       // Update the map
-      agent.documents.set(documentName, file.path);
+      if (!agent.documents) {
+        agent.documents = new Map();
+      }
+      agent.documents.set(documentName, relativePath);
       agent.markModified('documents');
 
       await agent.save();
@@ -626,9 +658,8 @@ class AgentController {
       });
 
     } catch (error) {
-      // Cleanup file if error occurs
-      if (req.file) {
-        const fs = require('fs');
+      // Cleanup temp file if error occurs
+      if (req.file && fs.existsSync(req.file.path)) {
         try {
           fs.unlinkSync(req.file.path);
         } catch (e) {
@@ -694,6 +725,74 @@ class AgentController {
     } catch (error) {
       logger.error('Delete document error', { error: error.message });
       return ResponseHandler.serverError(res, 'Failed to delete document', error);
+    }
+  }
+
+  /**
+   * Upload multiple agent documents
+   * POST /api/agents/:id/documents/bulk
+   */
+  static async uploadBulkDocuments(req, res) {
+    const fs = require('fs');
+
+    try {
+      const { id } = req.params;
+      const files = req.files;
+
+      if (!files || Object.keys(files).length === 0) {
+        return ResponseHandler.badRequest(res, 'No files uploaded');
+      }
+
+      // Helper to cleanup all temp files
+      const cleanupAllTemp = () => {
+        Object.values(files).flat().forEach(file => {
+          if (file && fs.existsSync(file.path)) {
+            try { fs.unlinkSync(file.path); } catch (e) { }
+          }
+        });
+      };
+
+      const agent = await Agent.findById(id);
+      if (!agent) {
+        cleanupAllTemp();
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      const uploadedDocs = {};
+
+      for (const [fieldName, fileArray] of Object.entries(files)) {
+        const file = fileArray[0]; // Assuming maxCount 1 per field
+
+        // Use storage service to move file
+        // Pass fieldName as documentKey to format filename as 'idProof.pdf' etc.
+        const relativePath = moveFileToAgentFolder(file, agent, fieldName);
+
+        // Update agent document map
+        if (!agent.documents) agent.documents = new Map();
+        agent.documents.set(fieldName, relativePath);
+        uploadedDocs[fieldName] = relativePath;
+      }
+
+      agent.markModified('documents');
+      await agent.save();
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, { action: 'bulk_upload_documents', count: Object.keys(uploadedDocs).length }, {}, req);
+
+      return ResponseHandler.success(res, 'Documents uploaded successfully', {
+        agent,
+        documents: agent.documents
+      });
+
+    } catch (error) {
+      // Cleanup files on error
+      if (req.files) {
+        Object.values(req.files).flat().forEach(file => {
+          try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch (e) { }
+        });
+      }
+      logger.error('Bulk upload documents error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to upload documents', error);
     }
   }
 }

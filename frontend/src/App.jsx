@@ -39,7 +39,7 @@ import RoleForm from "./pages/admin/RoleForm";
 
 // Agent Pages
 import AgentList from "./pages/agents/AgentList";
-import AgentDetails from "./pages/agents/AgentDetails";
+
 import AgentDetailView from "./pages/agents/AgentDetailView";
 import Settings from './pages/admin/Settings';
 import PendingAgents from "./pages/agents/PendingAgents";
@@ -310,7 +310,7 @@ function AppContent() {
           path="agents/:id"
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
-              <AgentDetails />
+              <AgentDetailView />
             </ProtectedRoute>
           }
         />
