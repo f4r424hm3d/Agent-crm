@@ -1,4 +1,4 @@
-const { Agent, User } = require('../models');
+const { Agent, User, Student, Application } = require('../models');
 const ResponseHandler = require('../utils/responseHandler');
 const AuditService = require('../services/auditService');
 const emailService = require('../services/emailService');
@@ -133,6 +133,13 @@ class AgentController {
           logger.error('Failed to send password setup email (Background)', { error: emailError.message, agentId: agent._id });
         });
 
+      // 6. Log audit
+      await AuditService.logCreate(req.user, 'Agent', agent._id, {
+        agentName: agent.name,
+        email: agent.email,
+        companyName: agent.company_name
+      }, req);
+
       return ResponseHandler.created(res, 'Agent created successfully. Password setup link sent via email.', { agent });
     } catch (error) {
       if (error.code === 11000) {
@@ -164,7 +171,8 @@ class AgentController {
         'city', 'state', 'pincode', 'country', 'specialization',
         'servicesOffered', 'currentStudents', 'teamSize', 'annualRevenue',
         'partnershipType', 'expectedStudents', 'marketingBudget',
-        'whyPartner', 'references', 'additionalInfo', 'documents'
+        'whyPartner', 'references', 'additionalInfo', 'documents',
+        'accessibleCountries', 'accessibleUniversities'
       ];
 
       // Map snake_case fields to camelCase
@@ -197,7 +205,9 @@ class AgentController {
         why_partner: 'whyPartner',
         references: 'references',
         additional_info: 'additionalInfo',
-        documents: 'documents'
+        documents: 'documents',
+        accessible_countries: 'accessibleCountries',
+        accessible_universities: 'accessibleUniversities'
       };
 
       const updates = {};
@@ -235,6 +245,9 @@ class AgentController {
       Object.assign(agent, updates);
       await agent.save();
 
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, {}, updates, req);
+
       return ResponseHandler.success(res, 'Agent updated successfully', { agent });
     } catch (error) {
       if (error.code === 11000) {
@@ -259,6 +272,12 @@ class AgentController {
       }
 
       await agent.deleteOne();
+
+      // Log audit
+      await AuditService.logDelete(req.user, 'Agent', id, {
+        agentName: agent.name || `${agent.firstName} ${agent.lastName}`,
+        email: agent.email
+      }, req);
 
       return ResponseHandler.success(res, 'Agent deleted successfully');
     } catch (error) {
@@ -430,6 +449,60 @@ class AgentController {
   }
 
   /**
+   * Get agent dashboard statistics
+   * GET /api/agents/dashboard/stats
+   */
+  static async getDashboardStats(req, res) {
+    try {
+      const agentId = req.userId;
+
+      // Get student IDs for this agent once
+      const studentIds = await Student.find({ agentId }).distinct('_id');
+
+      // 1. Get totals and recent items
+      const [totalStudents, totalApplications, recentStudents, recentApplications] = await Promise.all([
+        Student.countDocuments({ agentId }),
+        Application.countDocuments({ studentId: { $in: studentIds } }),
+        Student.find({ agentId }).sort({ createdAt: -1 }).limit(5).select('firstName lastName email studentId status createdAt'),
+        Application.find({ studentId: { $in: studentIds } })
+          .populate('studentId', 'firstName lastName')
+          .sort({ createdAt: -1 })
+          .limit(5)
+      ]);
+
+      // 2. Get applications by stage
+      const stageStats = await Application.aggregate([
+        { $match: { studentId: { $in: studentIds } } },
+        { $group: { _id: '$stage', count: { $sum: 1 } } }
+      ]);
+
+      // 3. Get earnings summary (if payout model exists, otherwise mock or use commissions)
+      // For now, using the agent's stats field or a placeholder
+      const agent = await Agent.findById(agentId).select('stats');
+
+      const dashboardData = {
+        stats: {
+          totalStudents,
+          totalApplications,
+          totalEarnings: agent.stats?.lifetimeEarnings || 0,
+          pendingApplications: stageStats.find(s => s._id === 'Pre-Payment')?.count || 0,
+        },
+        recentStudents,
+        recentApplications,
+        stageBreakdown: stageStats.reduce((acc, curr) => {
+          acc[curr._id] = curr.count;
+          return acc;
+        }, {}),
+      };
+
+      return ResponseHandler.success(res, 'Dashboard statistics retrieved successfully', dashboardData);
+    } catch (error) {
+      logger.error('Get Agent Dashboard Stats Error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to fetch dashboard statistics', error);
+    }
+  }
+
+  /**
    * Get agent statistics
    * GET /api/agents/:id/stats
    */
@@ -507,6 +580,120 @@ class AgentController {
     } catch (error) {
       logger.error('Update bank details error', { error: error.message });
       return ResponseHandler.serverError(res, 'Failed to update bank details', error);
+    }
+  }
+  /**
+   * Upload agent document
+   * POST /api/agents/:id/documents
+   */
+  static async uploadDocument(req, res) {
+    try {
+      const { id } = req.params;
+      const { documentName } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return ResponseHandler.badRequest(res, 'No file uploaded');
+      }
+
+      if (!documentName) {
+        // Remove uploaded file if validation fails
+        const fs = require('fs');
+        fs.unlinkSync(file.path);
+        return ResponseHandler.badRequest(res, 'Document name is required');
+      }
+
+      const agent = await Agent.findById(id);
+      if (!agent) {
+        // Remove uploaded file
+        const fs = require('fs');
+        fs.unlinkSync(file.path);
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Update the map
+      agent.documents.set(documentName, file.path);
+      agent.markModified('documents');
+
+      await agent.save();
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, { action: 'upload_document', document: documentName }, {}, req);
+
+      return ResponseHandler.success(res, 'Document uploaded successfully', {
+        agent,
+        documents: agent.documents
+      });
+
+    } catch (error) {
+      // Cleanup file if error occurs
+      if (req.file) {
+        const fs = require('fs');
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {
+          console.error('Failed to delete file after error', e);
+        }
+      }
+
+      logger.error('Upload document error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to upload document', error);
+    }
+  }
+  /**
+   * Delete agent document
+   * DELETE /api/agents/:id/documents/:documentName
+   */
+  static async deleteDocument(req, res) {
+    try {
+      const { id, documentName } = req.params;
+
+      const agent = await Agent.findById(id);
+      if (!agent) {
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Check if document exists
+      if (!agent.documents || !agent.documents.get(documentName)) {
+        return ResponseHandler.notFound(res, 'Document not found');
+      }
+
+      const filePath = agent.documents.get(documentName);
+
+      // Create a promise-based unlink to handle file deletion
+      const fs = require('fs');
+      const util = require('util');
+      const unlink = util.promisify(fs.unlink);
+
+      try {
+        // Check if file exists before trying to delete
+        if (fs.existsSync(filePath)) {
+          await unlink(filePath);
+        } else {
+          console.warn(`File not found at path: ${filePath}, removing reference from DB anyway.`);
+        }
+      } catch (err) {
+        console.error('Error deleting file properties:', err);
+        // Continue to remove from DB even if file delete fails (or maybe it was already gone)
+      }
+
+      // Remove from map
+      agent.documents.delete(documentName);
+      agent.markModified('documents');
+
+      await agent.save();
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, { action: 'delete_document', document: documentName }, {}, req);
+
+      return ResponseHandler.success(res, 'Document deleted successfully', {
+        agent,
+        documents: agent.documents
+      });
+
+    } catch (error) {
+      logger.error('Delete document error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to delete document', error);
     }
   }
 }

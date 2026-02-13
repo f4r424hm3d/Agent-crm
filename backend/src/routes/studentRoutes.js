@@ -10,7 +10,7 @@ const path = require('path');
 // Multer configuration
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/documents/');
+    cb(null, 'upload/student/documents/');
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -43,15 +43,39 @@ const validateRequest = (req, res, next) => {
 
 router.get('/', authMiddleware, StudentController.getAllStudents);
 
+// Get current student's own profile (must be before /:id route)
+router.get('/me', authMiddleware, StudentController.getMyProfile);
+
+// Update current student's own profile
+router.put('/me', authMiddleware, StudentController.updateMyProfile);
+
+// Upload current student's own document
+router.post(
+  '/me/documents',
+  authMiddleware,
+  upload.single('document'),
+  [body('document_type').trim().notEmpty().withMessage('Document type is required')],
+  validateRequest,
+  StudentController.uploadMyDocument
+);
+
+// Delete current student's own document
+router.delete(
+  '/me/documents/:documentId',
+  authMiddleware,
+  StudentController.deleteMyDocument
+);
+
 router.get('/:id', authMiddleware, StudentController.getStudentById);
 
 router.post(
   '/',
   authMiddleware,
   [
-    body('name').trim().notEmpty().withMessage('Name is required'),
+    body('firstName').trim().notEmpty().withMessage('First name is required'),
+    body('lastName').trim().notEmpty().withMessage('Last name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+    body('password').optional().isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
   ],
   validateRequest,
   StudentController.createStudent
@@ -68,6 +92,13 @@ router.post(
   [body('document_type').trim().notEmpty().withMessage('Document type is required')],
   validateRequest,
   StudentController.uploadDocument
+);
+
+router.delete(
+  '/:id/documents/:documentId',
+  authMiddleware,
+  // potentially add role check here if needed, butauthMiddleware might handle basic user context
+  StudentController.deleteDocument
 );
 
 module.exports = router;

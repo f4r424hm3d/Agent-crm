@@ -74,7 +74,7 @@ const settingsRoutes = require('./src/routes/settingsRoutes');
 const inquiryRoutes = require('./src/routes/inquiryRoutes');
 const studentDraftRoutes = require('./src/routes/studentDraftRoutes');
 const otpRoutes = require('./src/routes/otpRoutes');
-const { validateReferral } = require('./src/middleware/referralValidation');
+const { validateReferral } = require('./src/middlewares/referralValidation');
 
 // Public referral validation endpoint (no auth required)
 app.get('/api/validate-referral', validateReferral, (req, res) => {
@@ -106,11 +106,16 @@ app.use('/api/audit-logs', auditLogRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/inquiry', inquiryRoutes);
+app.use('/api/external-search', require('./src/routes/externalApiRoutes'));
 app.use('/api/upload', require('./src/routes/uploadRoutes'));
 
 // Serve static files
 const path = require('path');
+app.use('/upload', express.static(path.join(__dirname, 'upload')));
+// Fix for legacy wrong URLs (map /uploads/documents -> upload/student/documents)
+app.use('/uploads/documents', express.static(path.join(__dirname, 'upload/student/documents')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/documents', express.static(path.join(__dirname, 'documents')));
 
 // 404 handler
 app.use((req, res) => {

@@ -67,7 +67,7 @@ class AuthController {
 
       logger.info('User logged in', { userId: user.id, email: user.email, role: user.role });
 
-      return ResponseHandler.success(res, 'Login successful', {
+      return ResponseHandler.success(res, 'Welcome back! You have successfully logged in.', {
         token,
         user: {
           id: user._id,
@@ -142,16 +142,16 @@ class AuthController {
 
       logger.info('Agent logged in', { agentId: agent.id, email: agent.email });
 
-      return ResponseHandler.success(res, 'Login successful', {
+      return ResponseHandler.success(res, 'Welcome! You have successfully logged in as an agent.', {
         token,
         user: {
-          id: agent.id,
-          name: agent.name,
+          id: agent._id,
+          name: `${agent.firstName} ${agent.lastName}`, // Construct full name
           email: agent.email,
           role: 'AGENT',
           phone: agent.phone,
           status: agent.status,
-          company_name: agent.company_name,
+          companyName: agent.companyName,
           approvalStatus: agent.approvalStatus,
         },
       });
@@ -217,6 +217,13 @@ class AuthController {
       // Send registration email
       await emailService.sendAgentRegistrationEmail(agent);
 
+      // Log audit
+      await AuditService.logCreate(null, 'Agent', agent._id, {
+        agentName: agent.name,
+        email: agent.email,
+        description: 'Self-registration'
+      }, req);
+
       logger.info('Agent registered', { agentId: agent.id, email: agent.email });
 
       return ResponseHandler.created(
@@ -277,6 +284,13 @@ class AuthController {
       // Send welcome email with setup link
       await emailService.sendStudentWelcomeEmail(student, setupToken);
 
+      // Log audit
+      await AuditService.logCreate(null, 'Student', student._id, {
+        studentName: `${student.firstName} ${student.lastName}`,
+        email: student.email,
+        description: 'Self-registration'
+      }, req);
+
       logger.info('Student registered via public URL', { studentId: student._id, email: student.email });
 
       return ResponseHandler.created(res, 'Registration successful. Please check your email to set your password.', {
@@ -325,7 +339,10 @@ class AuthController {
       student.lastLogin = new Date();
       await student.save();
 
-      return ResponseHandler.success(res, 'Login successful', {
+      // Log audit
+      await AuditService.logLogin(student, req, 'Student');
+
+      return ResponseHandler.success(res, 'Welcome back! You have successfully logged in.', {
         token,
         user: {
           id: student._id,
@@ -364,6 +381,19 @@ class AuthController {
       student.passwordSetupExpires = undefined;
 
       await student.save();
+
+      // Log audit
+      await AuditService.log({
+        action: 'UPDATE',
+        entityType: 'Student',
+        entityId: student._id,
+        description: 'Password setup completed',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        studentId: student._id,
+        userName: `${student.firstName} ${student.lastName}`,
+        userRole: 'STUDENT'
+      });
 
       logger.info('Student password setup complete', { studentId: student._id });
 
@@ -465,6 +495,19 @@ class AuthController {
 
       await student.save();
 
+      // Log audit
+      await AuditService.log({
+        action: 'UPDATE',
+        entityType: 'Student',
+        entityId: student._id,
+        description: 'Password reset successful',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        studentId: student._id,
+        userName: `${student.firstName} ${student.lastName}`,
+        userRole: 'STUDENT'
+      });
+
       await emailService.sendStudentPasswordResetSuccess(student);
 
       return ResponseHandler.success(res, 'Password reset successful.');
@@ -500,11 +543,12 @@ class AuthController {
   static async logout(req, res) {
     try {
       // Log audit
-      await AuditService.logLogout(req.user, req);
+      const userType = req.userRole === 'AGENT' ? 'Agent' : (req.userRole === 'STUDENT' ? 'Student' : 'User');
+      await AuditService.logLogout(req.user, req, userType);
 
       logger.info('User logged out', { userId: req.userId });
 
-      return ResponseHandler.success(res, 'Logout successful');
+      return ResponseHandler.success(res, 'You have been successfully logged out. See you soon!');
     } catch (error) {
       logger.error('Logout error', { error: error.message });
       return ResponseHandler.serverError(res, 'Logout failed', error);
@@ -559,6 +603,19 @@ class AuthController {
 
       await agent.save();
 
+      // Log audit
+      await AuditService.log({
+        action: 'UPDATE',
+        entityType: 'Agent',
+        entityId: agent._id,
+        description: 'Password setup completed',
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        agentId: agent._id,
+        agentName: agent.name,
+        userRole: 'AGENT'
+      });
+
       logger.info('Password setup completed', { agentId: agent._id, email: agent.email });
 
       return ResponseHandler.success(res, 'Password set successfully. You can now login.');
@@ -569,27 +626,46 @@ class AuthController {
   }
 
   /**
-   * Forgot Password - Send OTP
+   * Forgot Password - Send OTP (Role-based routing)
    * POST /api/auth/forgot-password
+   * Body: { email, role }
    */
   static async forgotPassword(req, res) {
     try {
-      const { email } = req.body;
+      const { email, role } = req.body;
 
       if (!email) {
         return ResponseHandler.badRequest(res, 'Email is required');
       }
 
-      // Find agent by email
-      const agent = await Agent.findOne({ email: email.toLowerCase() });
+      if (!role) {
+        return ResponseHandler.badRequest(res, 'Role is required');
+      }
 
-      // Don't reveal if email exists
-      if (!agent) {
+      let user = null;
+      let tableName = '';
+
+      // Route to correct table based on role
+      if (role === 'STUDENT') {
+        user = await Student.findOne({ email: email.toLowerCase(), isCompleted: true });
+        tableName = 'Student';
+      } else if (role === 'AGENT') {
+        user = await Agent.findOne({ email: email.toLowerCase() });
+        tableName = 'Agent';
+      } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+        user = await User.findOne({ email: email.toLowerCase(), role });
+        tableName = 'User';
+      } else {
+        return ResponseHandler.badRequest(res, 'Invalid role');
+      }
+
+      // Don't reveal if email exists (security)
+      if (!user) {
         return ResponseHandler.success(res, 'If the email exists, an OTP has been sent');
       }
 
-      // Check if password is set
-      if (!agent.isPasswordSet) {
+      // Check if password is set (for Agent/Student)
+      if ((role === 'AGENT' || role === 'STUDENT') && !user.isPasswordSet) {
         // Password not set yet - resend setup link instead of OTP
         const crypto = require('crypto');
 
@@ -597,12 +673,12 @@ class AuthController {
         const setupToken = crypto.randomBytes(32).toString('hex');
         const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-        // Update agent with new token
-        agent.passwordSetupToken = setupToken;
-        agent.passwordSetupExpires = tokenExpires;
-        await agent.save();
+        // Update user with new token
+        user.passwordSetupToken = setupToken;
+        user.passwordSetupExpires = tokenExpires;
+        await user.save();
 
-        // Send password setup email with retry mechanism
+        // Send password setup email
         const maxRetries = 3;
         let attempt = 0;
         let emailSent = false;
@@ -611,17 +687,22 @@ class AuthController {
         while (attempt < maxRetries && !emailSent) {
           attempt++;
           try {
-            await emailService.sendPasswordSetupEmail(agent, setupToken);
+            if (role === 'STUDENT') {
+              await emailService.sendStudentWelcomeEmail(user, setupToken);
+            } else {
+              await emailService.sendPasswordSetupEmail(user, setupToken);
+            }
             emailSent = true;
-            logger.info('Password setup link resent (expired token case)', {
-              agentId: agent._id,
-              email: agent.email,
+            logger.info('Password setup link resent', {
+              userId: user._id,
+              email: user.email,
+              role,
               attempt
             });
           } catch (emailError) {
             lastError = emailError;
             logger.error(`Failed to send setup email - Attempt ${attempt}/${maxRetries}`, {
-              agentId: agent._id,
+              userId: user._id,
               error: emailError.message
             });
 
@@ -634,7 +715,7 @@ class AuthController {
 
         if (!emailSent) {
           logger.error('All setup email send attempts failed', {
-            agentId: agent._id,
+            userId: user._id,
             error: lastError?.message
           });
           return ResponseHandler.serverError(res, 'Failed to send setup link. Please contact support.');
@@ -648,9 +729,9 @@ class AuthController {
       const otp = generateOTP();
 
       // Save OTP with 10 minute expiry
-      agent.passwordResetOTP = otp;
-      agent.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
-      await agent.save();
+      user.passwordResetOTP = otp;
+      user.passwordResetOTPExpires = Date.now() + 10 * 60 * 1000; // 10 minutes
+      await user.save();
 
       // Send OTP email with retry mechanism
       const maxRetries = 3;
@@ -661,17 +742,23 @@ class AuthController {
       while (attempt < maxRetries && !emailSent) {
         attempt++;
         try {
-          await emailService.sendPasswordResetOTP(agent, otp);
+          if (role === 'STUDENT') {
+            await emailService.sendStudentPasswordResetOTP(user, otp);
+          } else {
+            await emailService.sendPasswordResetOTP(user, otp);
+          }
           emailSent = true;
           logger.info('Password reset OTP sent', {
-            agentId: agent._id,
-            email: agent.email,
+            userId: user._id,
+            email: user.email,
+            role,
+            tableName,
             attempt
           });
         } catch (emailError) {
           lastError = emailError;
           logger.error(`Failed to send OTP email - Attempt ${attempt}/${maxRetries}`, {
-            agentId: agent._id,
+            userId: user._id,
             error: emailError.message
           });
 
@@ -686,7 +773,7 @@ class AuthController {
       // If all retries failed, return error
       if (!emailSent) {
         logger.error('All OTP email send attempts failed', {
-          agentId: agent._id,
+          userId: user._id,
           error: lastError?.message
         });
         return ResponseHandler.serverError(res, 'Failed to send OTP email. Please try again later.');
@@ -705,20 +792,48 @@ class AuthController {
    */
   static async verifyOTP(req, res) {
     try {
-      const { email, otp } = req.body;
+      const { email, otp, role } = req.body;
 
       if (!email || !otp) {
         return ResponseHandler.badRequest(res, 'Email and OTP are required');
       }
 
-      // Find agent
-      const agent = await Agent.findOne({
-        email: email.toLowerCase(),
-        passwordResetOTP: otp,
-        passwordResetOTPExpires: { $gt: Date.now() }
-      });
+      if (!role) {
+        return ResponseHandler.badRequest(res, 'Role is required');
+      }
 
-      if (!agent) {
+      let user = null;
+      let tableName = '';
+
+      // Route to correct table based on role
+      if (role === 'STUDENT') {
+        user = await Student.findOne({
+          email: email.toLowerCase(),
+          isCompleted: true, // Only completed student registrations
+          passwordResetOTP: otp,
+          passwordResetOTPExpires: { $gt: Date.now() }
+        });
+        tableName = 'Student';
+      } else if (role === 'AGENT') {
+        user = await Agent.findOne({
+          email: email.toLowerCase(),
+          passwordResetOTP: otp,
+          passwordResetOTPExpires: { $gt: Date.now() }
+        });
+        tableName = 'Agent';
+      } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+        user = await User.findOne({
+          email: email.toLowerCase(),
+          role,
+          passwordResetOTP: otp,
+          passwordResetOTPExpires: { $gt: Date.now() }
+        });
+        tableName = 'User';
+      } else {
+        return ResponseHandler.badRequest(res, 'Invalid role');
+      }
+
+      if (!user) {
         return ResponseHandler.badRequest(res, 'Invalid or expired OTP');
       }
 
@@ -726,14 +841,14 @@ class AuthController {
       const { generateToken } = require('../utils/otpGenerator');
       const resetToken = generateToken();
 
-      agent.passwordResetToken = resetToken;
-      agent.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
-      agent.passwordResetOTP = undefined; // Clear OTP after verification
-      agent.passwordResetOTPExpires = undefined;
+      user.passwordResetToken = resetToken;
+      user.passwordResetExpires = Date.now() + 60 * 60 * 1000; // 1 hour
+      user.passwordResetOTP = undefined; // Clear OTP after verification
+      user.passwordResetOTPExpires = undefined;
 
-      await agent.save();
+      await user.save();
 
-      logger.info('OTP verified successfully', { agentId: agent._id, email: agent.email });
+      logger.info('OTP verified successfully', { userId: user._id, email: user.email, role, tableName });
 
       return ResponseHandler.success(res, 'OTP verified successfully', { resetToken });
     } catch (error) {
@@ -743,12 +858,13 @@ class AuthController {
   }
 
   /**
-   * Reset Password
+   * Reset Password (Role-based)
    * POST /api/auth/reset-password
+   * Body: { token, password, confirmPassword, role }
    */
   static async resetPassword(req, res) {
     try {
-      const { token, password, confirmPassword } = req.body;
+      const { token, password, confirmPassword, role } = req.body;
 
       if (!token || !password || !confirmPassword) {
         return ResponseHandler.badRequest(res, 'Token and password are required');
@@ -765,37 +881,152 @@ class AuthController {
         return ResponseHandler.badRequest(res, validation.errors.join(', '));
       }
 
-      // Find agent by reset token
-      const agent = await Agent.findOne({
-        passwordResetToken: token,
-        passwordResetExpires: { $gt: Date.now() }
-      });
+      let user = null;
+      let tableName = '';
 
-      if (!agent) {
+      // Find user by reset token based on role
+      if (role === 'STUDENT') {
+        user = await Student.findOne({
+          passwordResetToken: token,
+          passwordResetExpires: { $gt: Date.now() }
+        });
+        tableName = 'Student';
+      } else if (role === 'AGENT') {
+        user = await Agent.findOne({
+          passwordResetToken: token,
+          passwordResetExpires: { $gt: Date.now() }
+        });
+        tableName = 'Agent';
+      } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+        user = await User.findOne({
+          passwordResetToken: token,
+          passwordResetExpires: { $gt: Date.now() }
+        });
+        tableName = 'User';
+      } else {
+        // If no role provided, try all tables (backward compatibility)
+        user = await Agent.findOne({
+          passwordResetToken: token,
+          passwordResetExpires: { $gt: Date.now() }
+        });
+        if (user) {
+          tableName = 'Agent';
+        } else {
+          user = await Student.findOne({
+            passwordResetToken: token,
+            passwordResetExpires: { $gt: Date.now() }
+          });
+          if (user) tableName = 'Student';
+        }
+        if (!user) {
+          user = await User.findOne({
+            passwordResetToken: token,
+            passwordResetExpires: { $gt: Date.now() }
+          });
+          if (user) tableName = 'User';
+        }
+      }
+
+      if (!user) {
         return ResponseHandler.badRequest(res, 'Invalid or expired reset token');
       }
 
       // Update password (will be hashed by pre-save hook)
-      agent.password = password;
-      agent.passwordResetToken = undefined;
-      agent.passwordResetExpires = undefined;
+      user.password = password;
+      user.passwordResetToken = undefined;
+      user.passwordResetExpires = undefined;
 
-      await agent.save();
+      await user.save();
 
       // Send success email
       try {
-        await emailService.sendPasswordResetSuccess(agent);
+        if (tableName === 'Student') {
+          await emailService.sendStudentPasswordResetSuccess(user);
+        } else {
+          await emailService.sendPasswordResetSuccess(user);
+        }
       } catch (emailError) {
         logger.error('Failed to send password reset success email', { error: emailError.message });
         // Don't fail the request if email fails
       }
 
-      logger.info('Password reset successful', { agentId: agent._id, email: agent.email });
+      logger.info('Password reset successful', { userId: user._id, email: user.email, role, tableName });
 
       return ResponseHandler.success(res, 'Password reset successfully. You can now login with your new password.');
     } catch (error) {
       logger.error('Reset password error', { error: error.message });
       return ResponseHandler.serverError(res, 'Failed to reset password', error);
+    }
+  }
+
+  /**
+   * Change Password (Authenticated)
+   * PUT /api/auth/change-password
+   * Body: { oldPassword, newPassword }
+   */
+  static async changePassword(req, res) {
+    try {
+      const { oldPassword, newPassword } = req.body;
+      const userId = req.userId;
+      const userRole = req.userRole;
+
+      if (!oldPassword || !newPassword) {
+        return ResponseHandler.badRequest(res, 'Old and new passwords are required');
+      }
+
+      // Validate new password strength
+      const { validatePassword } = require('../utils/passwordValidator');
+      const validation = validatePassword(newPassword);
+      if (!validation.isValid) {
+        return ResponseHandler.badRequest(res, validation.errors.join(', '));
+      }
+
+      let user = null;
+
+      // Find user based on role
+      if (userRole === 'STUDENT') {
+        user = await Student.findById(userId);
+      } else if (userRole === 'AGENT') {
+        user = await Agent.findById(userId);
+      } else {
+        user = await User.findById(userId);
+      }
+
+      if (!user) {
+        return ResponseHandler.notFound(res, 'User not found');
+      }
+
+      // Verify old password
+      const isPasswordValid = await user.comparePassword(oldPassword);
+      if (!isPasswordValid) {
+        return ResponseHandler.badRequest(res, 'Invalid current password');
+      }
+
+      // Update password (will be hashed by pre-save hook)
+      user.password = newPassword;
+      await user.save();
+
+      // Log audit
+      await AuditService.log({
+        userId: userRole === 'STUDENT' ? null : (userRole === 'AGENT' ? null : user._id),
+        userName: user.name || `${user.firstName} ${user.lastName}`,
+        userRole: userRole,
+        agentId: userRole === 'AGENT' ? user._id : null,
+        agentName: userRole === 'AGENT' ? user.name : null,
+        action: 'CHANGE_PASSWORD',
+        entityType: userRole === 'STUDENT' ? 'Student' : (userRole === 'AGENT' ? 'Agent' : 'User'),
+        entityId: user._id,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+        description: 'User changed their password'
+      });
+
+      logger.info('Password changed successfully', { userId, role: userRole });
+
+      return ResponseHandler.success(res, 'Password updated successfully');
+    } catch (error) {
+      logger.error('Change password error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to update password', error);
     }
   }
 }

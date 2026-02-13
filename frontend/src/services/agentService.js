@@ -31,6 +31,12 @@ export const agentService = {
     return response.data;
   },
 
+  // Get dashboard statistics
+  getDashboardStats: async () => {
+    const response = await apiClient.get('/agents/dashboard/stats');
+    return response.data;
+  },
+
   // Delete agent
   deleteAgent: async (id) => {
     const response = await apiClient.delete(`/agents/${id}`);
@@ -86,6 +92,12 @@ export const agentService = {
   // Get agent commissions
   getAgentCommissions: async (id) => {
     const response = await apiClient.get(`/agents/${id}/commissions`);
+    return response.data;
+  },
+
+  // Delete document
+  deleteDocument: async (id, documentName) => {
+    const response = await apiClient.delete(`/agents/${id}/documents/${documentName}`);
     return response.data;
   },
 };

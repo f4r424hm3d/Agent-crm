@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const userSchema = new mongoose.Schema({
   role: {
@@ -34,7 +34,12 @@ const userSchema = new mongoose.Schema({
   },
   lastLogin: {
     type: Date
-  }
+  },
+  // Password Reset Fields
+  passwordResetOTP: String,
+  passwordResetOTPExpires: Date,
+  passwordResetToken: String,
+  passwordResetExpires: Date
 }, {
   timestamps: true
 });

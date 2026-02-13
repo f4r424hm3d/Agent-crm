@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 
 const agentSchema = new mongoose.Schema({
   // Authentication
@@ -92,6 +92,15 @@ const agentSchema = new mongoose.Schema({
   termsAcceptedAt: Date,
   dataConsentAt: Date,
 
+  // Document Storage Paths
+  documents: {
+    type: Map,
+    of: mongoose.Schema.Types.Mixed,
+    default: {}
+  },
+
+
+
   // Status fields
   status: {
     type: String,
@@ -129,23 +138,17 @@ const agentSchema = new mongoose.Schema({
   passwordResetToken: String,
   passwordResetExpires: Date,
 
-  // Documents
-  documents: [
-    {
-      documentType: {
-        type: String,
-        required: true
-      },
-      url: {
-        type: String,
-        required: true
-      },
-      uploadedAt: {
-        type: Date,
-        default: Date.now
-      }
-    }
-  ],
+
+
+  // Access Control for external API data
+  accessibleCountries: [{
+    type: String,
+    trim: true
+  }],
+  accessibleUniversities: [{
+    type: String,
+    trim: true
+  }],
 
   // Stats (denormalized)
   stats: {
@@ -190,9 +193,11 @@ agentSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+
+
 // Hide password in JSON responses
 agentSchema.methods.toJSON = function () {
-  const obj = this.toObject();
+  const obj = this.toObject({ flattenMaps: true });
   delete obj.password;
   return obj;
 };

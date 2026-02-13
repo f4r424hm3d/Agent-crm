@@ -13,11 +13,13 @@ import Select from "../../components/common/Select";
 import Alert from "../../components/common/Alert";
 import { ROLES } from "../../utils/constants";
 import { selectSettings } from "../../store/slices/settingsSlice";
+import { useToast } from "../../components/ui/toast";
 import { Mail, Lock, UserCircle, ArrowLeft, ShieldCheck, ChevronRight } from "lucide-react";
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const toast = useToast();
   const { loading, error } = useSelector((state) => state.auth);
   const settings = useSelector(selectSettings);
   const [searchParams] = useSearchParams();
@@ -59,6 +61,7 @@ const Login = () => {
     try {
       const response = await authService.login(formData);
       dispatch(loginSuccess(response));
+      toast.success("Successfully Login");
       navigate("/dashboard");
     } catch (err) {
       dispatch(loginFailure(err.response?.data?.message || "Login failed"));
@@ -150,7 +153,7 @@ const Login = () => {
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between ml-1">
                   <label className="block text-sm font-bold text-gray-700">Password</label>
-                  <Link to="/forgot-password" size="sm" className="text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors hover:underline">
+                  <Link to={`/forgot-password${formData.role ? `?role=${formData.role}` : ''}`} size="sm" className="text-xs font-bold text-primary-600 hover:text-primary-700 transition-colors hover:underline">
                     Forgot Password?
                   </Link>
                 </div>

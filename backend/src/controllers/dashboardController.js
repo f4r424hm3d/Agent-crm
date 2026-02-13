@@ -43,10 +43,8 @@ class DashboardController {
       const recentApplications = await Application.find()
         .limit(10)
         .sort({ createdAt: -1 })
-        .populate('student')
-        .populate('agent')
-        .populate('university')
-        .populate('course');
+        .populate('studentId', 'personalInfo.firstName personalInfo.lastName personalInfo.email')
+        .populate('recruitmentAgentId', 'personalInfo.firstName personalInfo.lastName personalInfo.email agentId');
 
       // Pending agent approvals
       const pendingAgents = await Agent.countDocuments({ approvalStatus: 'pending' });
@@ -77,19 +75,24 @@ class DashboardController {
    */
   static async getAgentStats(req, res) {
     try {
-      // Ensure we have the agent ID. In the auth middleware, it might be in req.user.agent._id
-      const agentId = req.user.agent?._id || req.user.id;
+      const agentIdString = req.userId.toString();
+      const agentId = new mongoose.Types.ObjectId(agentIdString);
 
-      // My students
-      const myStudents = await Student.countDocuments({ agentId });
+      // My students (either assigned or referred)
+      const myStudents = await Student.countDocuments({
+        $or: [
+          { agentId: agentId },
+          { referredBy: agentIdString }
+        ]
+      });
 
       // My applications
-      const myApplications = await Application.countDocuments({ agentId });
+      const myApplications = await Application.countDocuments({ recruitmentAgentId: agentId });
 
       // Applications by status
       const applicationsByStatusRaw = await Application.aggregate([
-        { $match: { agentId } },
-        { $group: { _id: '$status', count: { $sum: 1 } } }
+        { $match: { recruitmentAgentId: agentId } },
+        { $group: { _id: '$stage', count: { $sum: 1 } } }
       ]);
 
       const applicationsByStatus = applicationsByStatusRaw.reduce((acc, item) => {
@@ -125,12 +128,10 @@ class DashboardController {
       };
 
       // Recent applications
-      const recentApplications = await Application.find({ agentId })
+      const recentApplications = await Application.find({ recruitmentAgentId: agentId })
         .limit(10)
         .sort({ createdAt: -1 })
-        .populate('student')
-        .populate('university')
-        .populate('course');
+        .populate('studentId', 'firstName lastName email');
 
       const stats = {
         myStudents,
@@ -161,9 +162,7 @@ class DashboardController {
       // My applications
       const applications = await Application.find({ studentId })
         .sort({ createdAt: -1 })
-        .populate('university')
-        .populate('course')
-        .populate('agent');
+        .populate('recruitmentAgentId', 'personalInfo.firstName personalInfo.lastName personalInfo.email agentId');
 
       // Applications by status
       const applicationsByStatus = applications.reduce((acc, app) => {
