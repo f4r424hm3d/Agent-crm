@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useSelector } from 'react-redux';
 import {
     User, Building, Mail, Phone, Globe, MapPin, Calendar,
     Briefcase, Award, Users, TrendingUp, Target, FileText,
     CheckCircle, XCircle, ArrowLeft, Edit, Shield, Info,
     BarChart3, PieChart, Clock, ExternalLink, Download, Save, Check,
-    ChevronLeft, Upload, CheckCircle2, X, UserCircle2
+    ChevronLeft, Upload, CheckCircle2, X, UserCircle2,
+    Plus, Loader2, Trash2
 } from 'lucide-react';
 import agentService from '../../services/agentService';
 import externalSearchService from '../../services/externalSearchService';
@@ -46,11 +48,16 @@ const AgentDetailView = () => {
     const navigate = useNavigate();
     const toast = useToast();
     const { success, error: showError } = toast;
+    const user = useSelector((state) => state.auth.user);
     const [agent, setAgent] = useState(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [activeSection, setActiveSection] = useState('overview');
     const [confirmAction, setConfirmAction] = useState({ type: null, isOpen: false });
+    // Upload state
+    const [newDocName, setNewDocName] = useState('');
+    const [newDocFile, setNewDocFile] = useState(null);
+    const [uploadingDoc, setUploadingDoc] = useState(false);
 
     const sectionRefs = {
         overview: useRef(null),
@@ -89,11 +96,16 @@ const AgentDetailView = () => {
                 await agentService.rejectAgent(id);
                 success('Agent application declined.');
                 fetchAgentDetails();
+            } else if (confirmAction.type === 'deleteDocument') {
+                await agentService.deleteDocument(id, confirmAction.data);
+                success('Document deleted successfully');
+                fetchAgentDetails();
             }
         } catch (error) {
+            console.error(error);
             showError('Failed to process request');
         } finally {
-            setConfirmAction({ type: null, isOpen: false });
+            setConfirmAction({ type: null, isOpen: false, data: null });
         }
     };
 
@@ -122,6 +134,46 @@ const AgentDetailView = () => {
             const offsetPosition = elementPosition + window.pageYOffset - offset;
             window.scrollTo({ top: offsetPosition, behavior: "smooth" });
         }
+    };
+
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("File size must be less than 5MB");
+                return;
+            }
+            setNewDocFile(file);
+        }
+    };
+
+    const handleUploadDocument = async () => {
+        if (!newDocName || !newDocFile) {
+            toast.error('Please provide both document name and file');
+            return;
+        }
+
+        setUploadingDoc(true);
+        const formData = new FormData();
+        formData.append('documentName', newDocName);
+        formData.append('file', newDocFile);
+
+        try {
+            await agentService.uploadDocument(id, formData);
+            toast.success('Document uploaded successfully!');
+            setNewDocName('');
+            setNewDocFile(null);
+            fetchAgentDetails();
+        } catch (error) {
+            console.error('Upload failed:', error);
+            toast.error(error.response?.data?.message || 'Failed to upload document');
+        } finally {
+            setUploadingDoc(false);
+        }
+    };
+
+    const handleDeleteDocument = (docName) => {
+        setConfirmAction({ type: 'deleteDocument', isOpen: true, data: docName });
     };
 
     if (loading && !agent) {
@@ -389,32 +441,136 @@ const AgentDetailView = () => {
                         {/* Section: Documents */}
                         <div ref={sectionRefs.documents} className="bg-white rounded-3xl shadow-sm border border-gray-200 overflow-hidden">
                             <SectionHeader title="Verification Vault" icon={FileText} />
-                            <div className="p-8">
-                                {agent.documents && agent.documents.length > 0 ? (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {agent.documents.map((doc, index) => (
-                                            <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-blue-600">
-                                                        <FileText className="w-5 h-5" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-xs font-black text-gray-700 capitalize">{doc.documentType || 'Document'}</p>
-                                                        <p className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">Verified File</p>
-                                                    </div>
-                                                </div>
-                                                <a href={doc.url} target="_blank" rel="noopener noreferrer" className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-all">
-                                                    <ExternalLink className="w-4 h-4" />
-                                                </a>
+
+                            {/* Admin Upload Section */}
+                            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                                <div className="p-6 border-b border-gray-100">
+                                    <div className="border-2 border-dashed border-blue-200 rounded-2xl p-6 bg-blue-50/30">
+                                        <h4 className="text-sm font-black text-gray-800 mb-4 flex items-center gap-2">
+                                            <Upload className="w-4 h-4 text-blue-600" />
+                                            Upload New Document
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
+                                                    Document Name
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="e.g. Award Certificate, License"
+                                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                                    value={newDocName}
+                                                    onChange={(e) => setNewDocName(e.target.value)}
+                                                />
                                             </div>
-                                        ))}
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
+                                                    Select File
+                                                </label>
+                                                <input
+                                                    type="file"
+                                                    accept=".pdf,.jpg,.jpeg,.png"
+                                                    onChange={handleFileSelect}
+                                                    className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                                />
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={handleUploadDocument}
+                                            disabled={uploadingDoc || !newDocName || !newDocFile}
+                                            className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                        >
+                                            {uploadingDoc ? (
+                                                <>
+                                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                                    Uploading...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Save className="w-4 h-4" />
+                                                    Save Document
+                                                </>
+                                            )}
+                                        </button>
                                     </div>
-                                ) : (
-                                    <div className="text-center py-12 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
-                                        <Info className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                                        <p className="text-gray-400 font-bold text-sm italic">No digital documents uploaded.</p>
-                                    </div>
-                                )}
+                                </div>
+                            )}
+
+                            {/* Documents List */}
+                            <div className="p-8">
+                                {/* Mandatory Documents Info */}
+                                <div className="mb-6 p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                                    <p className="text-xs font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                        <Info className="w-4 h-4" />
+                                        Required Documents for Verification
+                                    </p>
+                                    <p className="text-[10px] text-blue-600 leading-relaxed">
+                                        <strong>Mandatory:</strong> ID Proof, Company Licence, Agent Photo, Identity Document, Company Registration, Company Photo
+                                    </p>
+                                </div>
+
+                                {(() => {
+                                    // Filter out null/empty documents
+                                    const validDocs = agent.documents ? Object.entries(agent.documents).filter(([key, url]) => url && url.trim() !== '') : [];
+
+                                    return validDocs.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {validDocs.map(([key, url]) => {
+                                                // Construct full URL for documents
+                                                // Static files are served from backend root, not /api route
+                                                const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
+                                                const fullUrl = url?.startsWith('http') ? url : `${backendUrl}/${url}`;
+
+                                                return (
+                                                    <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100 group hover:border-blue-200 transition-all">
+                                                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                                                            <div className="w-10 h-10 rounded-xl bg-white shadow-xs flex items-center justify-center text-blue-600 flex-shrink-0">
+                                                                <FileText className="w-5 h-5" />
+                                                            </div>
+                                                            <div className="min-w-0 flex-1">
+                                                                <p className="text-xs font-black text-gray-700 capitalize truncate">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+                                                                <p className="text-[9px] text-gray-400 uppercase font-bold tracking-tighter">Verified File</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                                            {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                                                                <button
+                                                                    onClick={() => handleDeleteDocument(key)}
+                                                                    className="p-1.5 text-red-400 hover:text-red-700 hover:bg-red-50 rounded-lg transition-all"
+                                                                    title="Delete Document"
+                                                                >
+                                                                    <Trash2 className="w-3.5 h-3.5" />
+                                                                </button>
+                                                            )}
+                                                            <a
+                                                                href={fullUrl}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                                title="View Document"
+                                                            >
+                                                                <ExternalLink className="w-3.5 h-3.5" />
+                                                            </a>
+                                                            <a
+                                                                href={fullUrl}
+                                                                download
+                                                                className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all"
+                                                                title="Download Document"
+                                                            >
+                                                                <Download className="w-3.5 h-3.5" />
+                                                            </a>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-12 bg-gray-50 rounded-3xl border border-dashed border-gray-200">
+                                            <Info className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                                            <p className="text-gray-400 font-bold text-sm italic">No digital documents uploaded.</p>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         </div>
 
@@ -432,31 +588,42 @@ const AgentDetailView = () => {
                         </div>
                     </div>
                 </div>
-            </main>
+            </main >
 
             {/* Alert Dialog */}
-            <AlertDialog open={confirmAction.isOpen} onOpenChange={(isOpen) => setConfirmAction(prev => ({ ...prev, isOpen }))}>
+            < AlertDialog open={confirmAction.isOpen} onOpenChange={(isOpen) => setConfirmAction(prev => ({ ...prev, isOpen }))}>
                 <AlertDialogContent className="rounded-3xl p-8 border-none shadow-2xl">
                     <AlertDialogHeader>
-                        <AlertDialogTitle className="text-2xl font-black text-gray-900 mb-2">Final Confirmation</AlertDialogTitle>
+                        <AlertDialogTitle className="text-2xl font-black text-gray-900 mb-2">
+                            {confirmAction.type === 'deleteDocument' ? 'Delete Document?' : 'Final Confirmation'}
+                        </AlertDialogTitle>
                         <AlertDialogDescription className="text-gray-600">
                             {confirmAction.type === 'approve'
                                 ? "You're about to approve this agent. An official welcome email with login credentials will be sent."
-                                : "Are you certain you want to reject this partnership?"}
+                                : confirmAction.type === 'reject'
+                                    ? "Are you certain you want to reject this partnership?"
+                                    : `Are you sure you want to permanently delete "${confirmAction.data}"? This action cannot be undone.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="mt-8 gap-4">
                         <AlertDialogCancel className="rounded-xl border-2 border-gray-100 font-bold px-6 h-12">Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={handleAction}
-                            className={`rounded-xl font-black text-white px-8 h-12 shadow-lg ${confirmAction.type === 'approve' ? "bg-green-600 hover:bg-green-700 shadow-green-100" : "bg-red-600 hover:bg-red-700 shadow-red-100"}`}
+                            className={`rounded-xl font-black text-white px-8 h-12 shadow-lg ${confirmAction.type === 'approve'
+                                ? "bg-green-600 hover:bg-green-700 shadow-green-100"
+                                : "bg-red-600 hover:bg-red-700 shadow-red-100"
+                                }`}
                         >
-                            {confirmAction.type === 'approve' ? 'Confirm Approval' : 'Confirm Rejection'}
+                            {confirmAction.type === 'approve'
+                                ? 'Confirm Approval'
+                                : confirmAction.type === 'reject'
+                                    ? 'Confirm Rejection'
+                                    : 'Yes, Delete'}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>
-            </AlertDialog>
-        </div>
+            </AlertDialog >
+        </div >
     );
 };
 

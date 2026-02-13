@@ -76,6 +76,13 @@ const AgentProfile = () => {
     const [editMode, setEditMode] = useState({});
     const [editData, setEditData] = useState({});
 
+    // Document Upload State
+    const [uploadingDocKey, setUploadingDocKey] = useState(null);
+    const [uploadingDoc, setUploadingDoc] = useState(false);
+    const [newDocName, setNewDocName] = useState('');
+    const [newDocFile, setNewDocFile] = useState(null);
+    const fileInputRef = useRef(null);
+
     // Refs for scrolling
     const sectionRefs = {
         overview: useRef(null),
@@ -83,6 +90,79 @@ const AgentProfile = () => {
         business: useRef(null),
         expertise: useRef(null),
         documents: useRef(null)
+    };
+
+    const handleFileSelect = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            if (file.size > 5 * 1024 * 1024) {
+                toast.error("File size must be less than 5MB");
+                return;
+            }
+            setNewDocFile(file);
+        }
+    };
+
+    const handleMissingFileSelect = (key) => {
+        setUploadingDocKey(key);
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleMissingFileUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file || !uploadingDocKey) return;
+
+        if (file.size > 5 * 1024 * 1024) {
+            toast.error("File size must be less than 5MB");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('documentName', uploadingDocKey);
+        formData.append('file', file);
+
+        try {
+            setLoading(true);
+            const userId = user?.id || user?._id;
+            await agentService.uploadDocument(userId, formData);
+            toast.success("Document uploaded successfully");
+            fetchAgentProfile(userId);
+        } catch (error) {
+            console.error("Upload failed", error);
+            toast.error("Failed to upload document");
+        } finally {
+            setLoading(false);
+            setUploadingDocKey(null);
+            e.target.value = null;
+        }
+    };
+
+    const handleGeneralUpload = async () => {
+        if (!newDocName || !newDocFile) {
+            toast.error("Please provide both document name and file");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('documentName', newDocName);
+        formData.append('file', newDocFile);
+
+        try {
+            setUploadingDoc(true);
+            const userId = user?.id || user?._id;
+            await agentService.uploadDocument(userId, formData);
+            toast.success("Document uploaded successfully");
+            setNewDocName('');
+            setNewDocFile(null);
+            fetchAgentProfile(userId);
+        } catch (error) {
+            console.error("Upload failed", error);
+            toast.error("Failed to upload document");
+        } finally {
+            setUploadingDoc(false);
+        }
     };
 
     useEffect(() => {
@@ -610,43 +690,153 @@ const AgentProfile = () => {
                                 <FileText className="text-blue-600 w-5 h-5" />
                                 Verification Vault
                             </h3>
-                            <button
-                                className="flex items-center gap-2 px-3 py-1.5 bg-white border border-gray-200 text-gray-700 rounded-md hover:bg-gray-50 text-sm font-medium transition-colors shadow-sm"
-                            >
-                                <Upload className="w-3.5 h-3.5" />
-                                Upload New
-                            </button>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                onChange={handleMissingFileUpload}
+                                accept=".pdf,.jpg,.jpeg,.png"
+                            />
                         </div>
-                        <div className="p-8">
+                        <div className="p-8 space-y-6">
+                            {/* Guidance & Info */}
+                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
+                                <h4 className="text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
+                                    <Shield className="w-4 h-4" /> Required Verification Documents
+                                </h4>
+                                <p className="text-xs text-blue-700 leading-relaxed">
+                                    To verify your partnership status, please ensure the following documents are uploaded.
+                                    Clear, legible scans or photos are required.
+                                </p>
+                                <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-blue-800 font-medium">
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> ID Proof</li>
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Identity Document</li>
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Licence</li>
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Registration</li>
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Agent Photo</li>
+                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Photo</li>
+                                </ul>
+                            </div>
+
+                            {/* Upload Document Section */}
+                            <div className="border-2 border-dashed border-blue-200 rounded-2xl p-6 bg-blue-50/30">
+                                <h4 className="text-sm font-black text-gray-800 mb-4 flex items-center gap-2">
+                                    <Upload className="w-4 h-4 text-blue-600" />
+                                    Upload New Document
+                                </h4>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
+                                            Document Name
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder="e.g. Award Certificate, License"
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                            value={newDocName}
+                                            onChange={(e) => setNewDocName(e.target.value)}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
+                                            Select File
+                                        </label>
+                                        <input
+                                            type="file"
+                                            accept=".pdf,.jpg,.jpeg,.png"
+                                            onChange={handleFileSelect}
+                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                                        />
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={handleGeneralUpload}
+                                    disabled={uploadingDoc || !newDocName || !newDocFile}
+                                    className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                                >
+                                    {uploadingDoc ? (
+                                        <>
+                                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                                            </svg>
+                                            Uploading...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Save className="w-4 h-4" />
+                                            Save Document
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+
+                            {/* Missing Documents Section */}
+                            {(() => {
+                                const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'companyPhoto'];
+                                const uploadedDocs = agentData?.documents ? Object.keys(agentData.documents) : [];
+                                const missing = mandatoryDocs.filter(doc => !uploadedDocs.includes(doc));
+
+                                if (missing.length === 0) return null;
+
+                                return (
+                                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6">
+                                        <h4 className="text-sm font-bold text-red-800 flex items-center gap-2 mb-3">
+                                            <Shield className="w-4 h-4" /> Action Required: Missing Documents
+                                        </h4>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            {missing.map(key => (
+                                                <button
+                                                    key={key}
+                                                    onClick={() => handleFileSelect(key)}
+                                                    className="flex items-center justify-between p-3 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors group text-left"
+                                                >
+                                                    <span className="text-sm font-medium text-red-700">
+                                                        Upload {key.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase())}
+                                                    </span>
+                                                    <Upload className="w-4 h-4 text-red-400 group-hover:text-red-600" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {(!agentData?.documents || agentData.documents.length === 0) ? (
+                                {(!agentData?.documents || Object.keys(agentData.documents).length === 0) ? (
                                     <div className="md:col-span-2 py-10 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                                         <FileText className="w-12 h-12 mb-2 opacity-20" />
                                         <p className="font-medium">No documents uploaded</p>
                                         <p className="text-xs">Upload company registration or ID proof</p>
                                     </div>
                                 ) : (
-                                    agentData.documents.map((doc, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                                                    <FileText className="w-5 h-5" />
+                                    Object.entries(agentData.documents).map(([key, url]) => {
+                                        if (!url || typeof url !== 'string') return null;
+                                        // Format key to readable label
+                                        const label = key.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase());
+
+                                        return (
+                                            <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
+                                                        <FileText className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-sm font-bold text-gray-700 truncate max-w-[150px]">{label}</p>
+                                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Verified Document</p>
+                                                    </div>
                                                 </div>
-                                                <div>
-                                                    <p className="text-sm font-bold text-gray-700 truncate max-w-[150px]">{doc.name}</p>
-                                                    <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">{doc.type || 'Document'}</p>
-                                                </div>
+                                                <a
+                                                    href={`http://localhost:5000/${url}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
+                                                >
+                                                    <ExternalLink className="w-4 h-4" />
+                                                </a>
                                             </div>
-                                            <a
-                                                href={doc.url}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                            >
-                                                <ExternalLink className="w-4 h-4" />
-                                            </a>
-                                        </div>
-                                    ))
+                                        )
+                                    })
                                 )}
                             </div>
                         </div>

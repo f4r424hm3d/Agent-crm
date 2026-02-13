@@ -94,6 +94,12 @@ export const agentService = {
     const response = await apiClient.get(`/agents/${id}/commissions`);
     return response.data;
   },
+
+  // Delete document
+  deleteDocument: async (id, documentName) => {
+    const response = await apiClient.delete(`/agents/${id}/documents/${documentName}`);
+    return response.data;
+  },
 };
 
 export default agentService;

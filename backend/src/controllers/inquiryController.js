@@ -235,6 +235,95 @@ class InquiryController {
             return ResponseHandler.serverError(res, 'Failed to verify code.', error);
         }
     }
+
+    /**
+     * Upload Agent Documents
+     * POST /api/inquiry/upload-agent-documents
+     * Requires temporary agent data in body
+     */
+    static async uploadAgentDocuments(req, res) {
+        const fs = require('fs');
+        const path = require('path');
+
+        try {
+            // Get agent details from request body
+            const { firstName, lastName, tempAgentId } = req.body;
+
+            if (!firstName || !lastName) {
+                return ResponseHandler.badRequest(res, 'First name and last name are required');
+            }
+
+            // Create folder name: YYYYMMDD_tempId_FirstName_LastName
+            const today = new Date();
+            const dateString = today.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
+            const folderName = `${dateString}_${tempAgentId || Date.now()}_${firstName}_${lastName}`;
+            const agentFolder = path.join(__dirname, '../../uploads/agents', folderName);
+
+            // Create agent-specific folder
+            if (!fs.existsSync(agentFolder)) {
+                fs.mkdirSync(agentFolder, { recursive: true });
+            }
+
+            // Process uploaded files
+            const documentPaths = {};
+            const files = req.files;
+
+            if (!files || Object.keys(files).length === 0) {
+                return ResponseHandler.badRequest(res, 'No files uploaded');
+            }
+
+            // Move files from temp location to agent folder and store paths
+            for (const [fieldName, fileArray] of Object.entries(files)) {
+                const file = fileArray[0];
+                const ext = path.extname(file.originalname);
+                let newFileName;
+
+                // Set proper file names
+                switch (fieldName) {
+                    case 'idProof':
+                        newFileName = `id_proof${ext}`;
+                        break;
+                    case 'companyLicence':
+                        newFileName = `company_licence${ext}`;
+                        break;
+                    case 'agentPhoto':
+                        newFileName = `agent_photo${ext}`;
+                        break;
+                    case 'identityDocument':
+                        newFileName = `identity_document${ext}`;
+                        break;
+                    case 'companyRegistration':
+                        newFileName = `company_registration${ext}`;
+                        break;
+                    case 'resume':
+                        newFileName = `resume${ext}`;
+                        break;
+                    case 'companyPhoto':
+                        newFileName = `company_photo${ext}`;
+                        break;
+                    default:
+                        newFileName = `${fieldName}${ext}`;
+                }
+
+                const newPath = path.join(agentFolder, newFileName);
+
+                // Move file from temp location to agent folder
+                fs.renameSync(file.path, newPath);
+
+                // Store relative path for database
+                documentPaths[fieldName] = `uploads/agents/${folderName}/${newFileName}`;
+            }
+
+            return ResponseHandler.success(res, 'Documents uploaded successfully', {
+                documentPaths,
+                folderName
+            });
+
+        } catch (error) {
+            console.error('Upload Documents Error:', error);
+            return ResponseHandler.serverError(res, 'Failed to upload documents.', error);
+        }
+    }
 }
 
 module.exports = InquiryController;

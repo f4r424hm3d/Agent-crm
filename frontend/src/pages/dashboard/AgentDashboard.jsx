@@ -46,9 +46,30 @@ const AgentDashboard = () => {
     stageBreakdown: {}
   });
 
+  const [missingDocs, setMissingDocs] = useState([]);
+
   useEffect(() => {
     fetchDashboardData();
+    checkMissingDocuments();
   }, []);
+
+  const checkMissingDocuments = async () => {
+    try {
+      if (user?.id) {
+        const response = await agentService.getAgentById(user.id);
+        const agentData = response.data?.agent || response.agent || response.data || response;
+
+        if (agentData) {
+          const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'companyPhoto'];
+          const uploadedDocs = agentData.documents ? Object.keys(agentData.documents) : [];
+          const missing = mandatoryDocs.filter(doc => !uploadedDocs.includes(doc));
+          setMissingDocs(missing);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to check documents:", error);
+    }
+  };
 
   const fetchDashboardData = async () => {
     try {
@@ -118,6 +139,27 @@ const AgentDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {/* Missing Documents Alert */}
+      {missingDocs.length > 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3 animate-pulse">
+          <div className="p-2 bg-red-100 rounded-lg text-red-600">
+            <FiActivity className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-sm font-bold text-red-800">Action Required: Missing Documents</h3>
+            <p className="text-xs text-red-600 mt-1">
+              Please upload the following mandatory documents to activate full account features:
+              <span className="font-bold ml-1">
+                {missingDocs.map(d => d.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase())).join(', ')}
+              </span>
+            </p>
+            <Link to="/profile" className="text-xs font-bold text-red-700 underline mt-2 inline-block hover:text-red-900">
+              Go to Profile to Upload →
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -141,6 +183,21 @@ const AgentDashboard = () => {
           </button>
         </div>
       </div>
+
+      {/* Missing Documents Alert */}
+      {(() => {
+        const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'companyPhoto'];
+        // We need agent data which might not be in 'data' state yet. 
+        // Ideally we should fetch agent profile or rely on a check.
+        // For now, let's assume we fetch it or add a separate check.
+        // Actually, let's add a separate fetch for agent profile in useEffect for this check
+        return null;
+      })()}
+      {/* 
+        Wait, I cannot easily put async logic inside render. 
+        I need to update the component state to include missing docs info.
+        Let me update the state and useEffect instead of just this block.
+      */}
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -262,8 +319,8 @@ const AgentDashboard = () => {
                       <td>{app.programSnapshot?.universityName}</td>
                       <td>
                         <span className={`badge ${app.stage === 'Arrival' ? 'badge-success' :
-                            app.stage === 'Admission' ? 'badge-primary' :
-                              'badge-warning'
+                          app.stage === 'Admission' ? 'badge-primary' :
+                            'badge-warning'
                           }`}>
                           {app.stage}
                         </span>

@@ -94,35 +94,12 @@ const agentSchema = new mongoose.Schema({
 
   // Document Storage Paths
   documents: {
-    idProof: {
-      type: String,
-      default: null
-    },
-    companyLicence: {
-      type: String,
-      default: null
-    },
-    agentPhoto: {
-      type: String,
-      default: null
-    },
-    identityDocument: {
-      type: String,
-      default: null
-    },
-    companyRegistration: {
-      type: String,
-      default: null
-    },
-    resume: {
-      type: String,
-      default: null
-    },
-    companyPhoto: {
-      type: String,
-      default: null
-    }
+    type: Map,
+    of: mongoose.Schema.Types.Mixed,
+    default: {}
   },
+
+
 
   // Status fields
   status: {
@@ -161,23 +138,7 @@ const agentSchema = new mongoose.Schema({
   passwordResetToken: String,
   passwordResetExpires: Date,
 
-  // Documents
-  documents: [
-    {
-      documentType: {
-        type: String,
-        required: true
-      },
-      url: {
-        type: String,
-        required: true
-      },
-      uploadedAt: {
-        type: Date,
-        default: Date.now
-      }
-    }
-  ],
+
 
   // Access Control for external API data
   accessibleCountries: [{
@@ -232,9 +193,11 @@ agentSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+
+
 // Hide password in JSON responses
 agentSchema.methods.toJSON = function () {
-  const obj = this.toObject();
+  const obj = this.toObject({ flattenMaps: true });
   delete obj.password;
   return obj;
 };

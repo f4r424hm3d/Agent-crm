@@ -6,7 +6,8 @@ import {
     User, Building, Mail, Phone, Globe, FileText,
     AlertCircle, Briefcase, GraduationCap, Award,
     Calendar, Target, Send, ChevronRight, ChevronLeft,
-    CheckCircle2, ArrowLeft, ShieldCheck, MapPin, Users
+    CheckCircle2, ArrowLeft, ShieldCheck, MapPin, Users,
+    Upload, X
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { useToast } from '../../components/ui/toast';
@@ -46,7 +47,17 @@ const PartnerApplicationForm = () => {
         whyPartner: '',
         additionalInfo: '',
         termsAccepted: false,
-        dataConsent: false
+        dataConsent: false,
+        // Document uploads
+        documents: {
+            idProof: null,
+            companyLicence: null,
+            agentPhoto: null,
+            identityDocument: null,
+            companyRegistration: null,
+            resume: null,
+            companyPhoto: null
+        }
     });
 
     const [currentStep, setCurrentStep] = useState(1);
@@ -57,10 +68,46 @@ const PartnerApplicationForm = () => {
     const [isEmailVerified, setIsEmailVerified] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
 
-    const totalSteps = 5;
+    const totalSteps = 6;
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleFileUpload = (fieldName, file) => {
+        if (!file) {
+            setFormData(prev => ({
+                ...prev,
+                documents: { ...prev.documents, [fieldName]: null }
+            }));
+            return;
+        }
+
+        // Validate file type
+        const isPhoto = ['agentPhoto', 'companyPhoto'].includes(fieldName);
+        const allowedTypes = isPhoto
+            ? ['image/jpeg', 'image/jpg', 'image/png']
+            : ['application/pdf'];
+
+        if (!allowedTypes.includes(file.type)) {
+            const allowed = isPhoto ? 'JPG, JPEG, PNG' : 'PDF';
+            toast.error(`Invalid file type for ${fieldName.replace(/([A-Z])/g, ' $1').trim()}. Only ${allowed} files allowed.`);
+            return;
+        }
+
+        // Validate file size
+        const maxSize = isPhoto ? 2 * 1024 * 1024 : 5 * 1024 * 1024; // 2MB or 5MB
+        if (file.size > maxSize) {
+            const sizeLabel = isPhoto ? '2MB' : '5MB';
+            toast.error(`File size exceeds ${sizeLabel} limit for ${fieldName.replace(/([A-Z])/g, ' $1').trim()}`);
+            return;
+        }
+
+        setFormData(prev => ({
+            ...prev,
+            documents: { ...prev.documents, [fieldName]: file }
+        }));
+        toast.success(`${fieldName.replace(/([A-Z])/g, ' $1').trim()} uploaded successfully`);
     };
 
     const handleSendOtp = async () => {
@@ -128,13 +175,43 @@ const PartnerApplicationForm = () => {
         if (userAgent.indexOf("Mac") !== -1) os = "MacOS";
         if (userAgent.indexOf("Linux") !== -1) os = "Linux";
 
-        const submissionData = {
-            ...formData,
-            os: os,
-            browser: navigator.appName || 'Unknown'
-        };
-
         try {
+            let documentPaths = {};
+
+            // Step 1: Upload documents if any exist
+            if (Object.values(formData.documents).some(doc => doc !== null)) {
+                const docFormData = new FormData();
+                docFormData.append('firstName', formData.firstName);
+                docFormData.append('lastName', formData.lastName);
+                docFormData.append('tempAgentId', Date.now().toString());
+
+                // Append all documents
+                Object.entries(formData.documents).forEach(([key, file]) => {
+                    if (file) {
+                        docFormData.append(key, file);
+                    }
+                });
+
+                const uploadResponse = await apiClient.post('/inquiry/upload-agent-documents', docFormData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+
+                if (uploadResponse.data?.success) {
+                    documentPaths = uploadResponse.data.data.documentPaths;
+                    toast.success('Documents uploaded successfully');
+                } else {
+                    throw new Error('Failed to upload documents');
+                }
+            }
+
+            // Step 2: Submit application with document paths
+            const submissionData = {
+                ...formData,
+                documents: documentPaths, // Replace file objects with paths
+                os,
+                browser: navigator.appName || 'Unknown'
+            };
+
             const response = await apiClient.post('/inquiry/partner-application', submissionData);
             if (response.data && response.data.success) {
                 toast.success(response.data.message || 'Application submitted successfully!');
@@ -168,6 +245,12 @@ const PartnerApplicationForm = () => {
             case 4:
                 return formData.partnershipType && formData.expectedStudents && formData.whyPartner;
             case 5:
+                // Only 4 documents are REQUIRED
+                return formData.documents.idProof &&
+                    formData.documents.companyLicence &&
+                    formData.documents.agentPhoto &&
+                    formData.documents.companyPhoto;
+            case 6:
                 return formData.termsAccepted && formData.dataConsent;
             default:
                 return false;
@@ -186,7 +269,7 @@ const PartnerApplicationForm = () => {
 
             const stepInfo = feedback[currentStep];
             if (stepInfo) {
-                toast.success(`${stepInfo.title}! ${stepInfo.next}.`);
+                toast.success(`${stepInfo.title} !${stepInfo.next}.`);
             }
 
             setCurrentStep(currentStep + 1);
@@ -222,7 +305,8 @@ const PartnerApplicationForm = () => {
         { id: 2, title: 'Company', icon: Building },
         { id: 3, title: 'Expertise', icon: Target },
         { id: 4, title: 'Partnership', icon: Award },
-        { id: 5, title: 'Review', icon: FileText }
+        { id: 5, title: 'Documents', icon: FileText },
+        { id: 6, title: 'Review', icon: CheckCircle2 }
     ];
 
     return (
@@ -247,22 +331,25 @@ const PartnerApplicationForm = () => {
                         <div className="absolute top-1/2 left-0 w-full h-0.5 bg-gray-100 -translate-y-1/2 z-0" />
                         <div
                             className="absolute top-1/2 left-0 h-0.5 bg-emerald-500 -translate-y-1/2 z-0 transition-all duration-500"
-                            style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}%` }}
+                            style={{ width: `${((currentStep - 1) / (totalSteps - 1)) * 100}% ` }}
                         />
 
-                        {steps.map((step) => (
-                            <div key={step.id} className="relative z-10 flex flex-col items-center">
-                                <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentStep === step.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg' :
-                                    currentStep > step.id ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-gray-200 text-gray-400'
-                                    }`}>
-                                    {currentStep > step.id ? <CheckCircle2 size={20} /> : <step.icon size={18} />}
+                        {steps.map((step) => {
+                            const StepIcon = step.icon;
+                            return (
+                                <div key={step.id} className="relative z-10 flex flex-col items-center">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentStep === step.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg' :
+                                        currentStep > step.id ? 'bg-emerald-500 border-emerald-500 text-white' : 'bg-white border-gray-200 text-gray-400'
+                                        }`}>
+                                        {currentStep > step.id ? <CheckCircle2 size={20} /> : <StepIcon size={18} />}
+                                    </div>
+                                    <span className={`absolute -bottom-6 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${currentStep === step.id ? 'text-emerald-600' : 'text-gray-400'
+                                        }`}>
+                                        {step.title}
+                                    </span>
                                 </div>
-                                <span className={`absolute -bottom-6 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap ${currentStep === step.id ? 'text-emerald-600' : 'text-gray-400'
-                                    }`}>
-                                    {step.title}
-                                </span>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 
@@ -601,8 +688,252 @@ const PartnerApplicationForm = () => {
                             </div>
                         )}
 
-                        {/* Step 5: Review */}
+                        {/* Step 5: Documents */}
                         {currentStep === 5 && (
+                            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                                <div className="border-b border-gray-100 pb-4">
+                                    <h2 className="text-xl font-bold text-gray-900">Upload Documents</h2>
+                                    <p className="text-sm text-gray-500">Please upload the required documents (4 mandatory documents marked with *)</p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    {/* ID Proof - REQUIRED */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">ID Proof (Aadhaar/PAN/Passport) *</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileUpload('idProof', e.target.files[0])}
+                                                className="hidden"
+                                                id="idProof"
+                                            />
+                                            <label htmlFor="idProof" className="flex items-center justify-center w-full px-4 py-8 bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.idProof ? formData.documents.idProof.name : 'Click to upload PDF'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.idProof && (
+                                                <button
+                                                    onClick={() => handleFileUpload('idProof', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Company Licence - REQUIRED */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Company Licence *</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileUpload('companyLicence', e.target.files[0])}
+                                                className="hidden"
+                                                id="companyLicence"
+                                            />
+                                            <label htmlFor="companyLicence" className="flex items-center justify-center w-full px-4 py-8 bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.companyLicence ? formData.documents.companyLicence.name : 'Click to upload PDF'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.companyLicence && (
+                                                <button
+                                                    onClick={() => handleFileUpload('companyLicence', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Agent Photo - REQUIRED */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Agent Photo (Passport Size) *</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".jpg,.jpeg,.png"
+                                                onChange={(e) => handleFileUpload('agentPhoto', e.target.files[0])}
+                                                className="hidden"
+                                                id="agentPhoto"
+                                            />
+                                            <label htmlFor="agentPhoto" className="flex items-center justify-center w-full px-4 py-8 bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.agentPhoto ? formData.documents.agentPhoto.name : 'Click to upload image'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">JPG, PNG - Max 2MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.agentPhoto && (
+                                                <button
+                                                    onClick={() => handleFileUpload('agentPhoto', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Company Photo - REQUIRED */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Company Photo / Office Photo *</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".jpg,.jpeg,.png"
+                                                onChange={(e) => handleFileUpload('companyPhoto', e.target.files[0])}
+                                                className="hidden"
+                                                id="companyPhoto"
+                                            />
+                                            <label htmlFor="companyPhoto" className="flex items-center justify-center w-full px-4 py-8 bg-emerald-50 border-2 border-dashed border-emerald-300 rounded-lg cursor-pointer hover:bg-emerald-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-emerald-600 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.companyPhoto ? formData.documents.companyPhoto.name : 'Click to upload image'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">JPG, PNG - Max 2MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.companyPhoto && (
+                                                <button
+                                                    onClick={() => handleFileUpload('companyPhoto', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Identity Document - OPTIONAL */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">National/International Identity Document</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileUpload('identityDocument', e.target.files[0])}
+                                                className="hidden"
+                                                id="identityDocument"
+                                            />
+                                            <label htmlFor="identityDocument" className="flex items-center justify-center w-full px-4 py-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.identityDocument ? formData.documents.identityDocument.name : 'Click to upload PDF (Optional)'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.identityDocument && (
+                                                <button
+                                                    onClick={() => handleFileUpload('identityDocument', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Company Registration - OPTIONAL */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Company Registration Document</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileUpload('companyRegistration', e.target.files[0])}
+                                                className="hidden"
+                                                id="companyRegistration"
+                                            />
+                                            <label htmlFor="companyRegistration" className="flex items-center justify-center w-full px-4 py-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.companyRegistration ? formData.documents.companyRegistration.name : 'Click to upload PDF (Optional)'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.companyRegistration && (
+                                                <button
+                                                    onClick={() => handleFileUpload('companyRegistration', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Resume - OPTIONAL */}
+                                    <div className="space-y-2">
+                                        <label className="text-sm font-semibold text-gray-700">Agent Resume / CV</label>
+                                        <div className="relative">
+                                            <input
+                                                type="file"
+                                                accept=".pdf"
+                                                onChange={(e) => handleFileUpload('resume', e.target.files[0])}
+                                                className="hidden"
+                                                id="resume"
+                                            />
+                                            <label htmlFor="resume" className="flex items-center justify-center w-full px-4 py-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-100 transition-colors">
+                                                <div className="text-center">
+                                                    <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
+                                                    <p className="text-sm text-gray-600">
+                                                        {formData.documents.resume ? formData.documents.resume.name : 'Click to upload PDF (Optional)'}
+                                                    </p>
+                                                    <p className="text-xs text-gray-500 mt-1">Max 5MB</p>
+                                                </div>
+                                            </label>
+                                            {formData.documents.resume && (
+                                                <button
+                                                    onClick={() => handleFileUpload('resume', null)}
+                                                    className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600"
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                                    <div className="flex items-start">
+                                        <AlertCircle className="h-5 w-5 text-blue-600 mt-0.5 mr-3 flex-shrink-0" />
+                                        <div>
+                                            <p className="text-sm font-semibold text-blue-900">Required Documents:</p>
+                                            <ul className="text-sm text-blue-800 mt-1 space-y-1 list-disc list-inside">
+                                                <li>ID Proof (Aadhaar/PAN/Passport)</li>
+                                                <li>Company Licence</li>
+                                                <li>Agent Photo (Passport Size)</li>
+                                                <li>Company/Office Photo</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Step 6: Review */}
+                        {currentStep === 6 && (
                             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-500">
                                 <div className="border-b border-gray-100 pb-4">
                                     <h2 className="text-xl font-bold text-gray-900">Review & Confirmation</h2>
@@ -657,8 +988,7 @@ const PartnerApplicationForm = () => {
                                     className={`px-8 py-2.5 rounded-lg font-bold shadow-sm transition-all flex items-center gap-2 ${!isStepValid()
                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
                                         : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-100'
-                                        }`}
-                                >
+                                        }`}>
                                     Next Step <ChevronRight size={16} />
                                 </button>
                             ) : (
@@ -668,8 +998,7 @@ const PartnerApplicationForm = () => {
                                     className={`px-10 py-2.5 rounded-lg font-bold shadow-md transition-all flex items-center gap-2 ${isSubmitting || !isStepValid()
                                         ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
                                         : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200'
-                                        }`}
-                                >
+                                        }`}>
                                     {isSubmitting ? 'Submitting...' : <><Send size={16} /> Submit Application</>}
                                 </button>
                             )}

@@ -115,6 +115,7 @@ app.use('/upload', express.static(path.join(__dirname, 'upload')));
 // Fix for legacy wrong URLs (map /uploads/documents -> upload/student/documents)
 app.use('/uploads/documents', express.static(path.join(__dirname, 'upload/student/documents')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use('/documents', express.static(path.join(__dirname, 'documents')));
 
 // 404 handler
 app.use((req, res) => {

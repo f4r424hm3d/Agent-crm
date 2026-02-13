@@ -582,6 +582,120 @@ class AgentController {
       return ResponseHandler.serverError(res, 'Failed to update bank details', error);
     }
   }
+  /**
+   * Upload agent document
+   * POST /api/agents/:id/documents
+   */
+  static async uploadDocument(req, res) {
+    try {
+      const { id } = req.params;
+      const { documentName } = req.body;
+      const file = req.file;
+
+      if (!file) {
+        return ResponseHandler.badRequest(res, 'No file uploaded');
+      }
+
+      if (!documentName) {
+        // Remove uploaded file if validation fails
+        const fs = require('fs');
+        fs.unlinkSync(file.path);
+        return ResponseHandler.badRequest(res, 'Document name is required');
+      }
+
+      const agent = await Agent.findById(id);
+      if (!agent) {
+        // Remove uploaded file
+        const fs = require('fs');
+        fs.unlinkSync(file.path);
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Update the map
+      agent.documents.set(documentName, file.path);
+      agent.markModified('documents');
+
+      await agent.save();
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, { action: 'upload_document', document: documentName }, {}, req);
+
+      return ResponseHandler.success(res, 'Document uploaded successfully', {
+        agent,
+        documents: agent.documents
+      });
+
+    } catch (error) {
+      // Cleanup file if error occurs
+      if (req.file) {
+        const fs = require('fs');
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch (e) {
+          console.error('Failed to delete file after error', e);
+        }
+      }
+
+      logger.error('Upload document error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to upload document', error);
+    }
+  }
+  /**
+   * Delete agent document
+   * DELETE /api/agents/:id/documents/:documentName
+   */
+  static async deleteDocument(req, res) {
+    try {
+      const { id, documentName } = req.params;
+
+      const agent = await Agent.findById(id);
+      if (!agent) {
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Check if document exists
+      if (!agent.documents || !agent.documents.get(documentName)) {
+        return ResponseHandler.notFound(res, 'Document not found');
+      }
+
+      const filePath = agent.documents.get(documentName);
+
+      // Create a promise-based unlink to handle file deletion
+      const fs = require('fs');
+      const util = require('util');
+      const unlink = util.promisify(fs.unlink);
+
+      try {
+        // Check if file exists before trying to delete
+        if (fs.existsSync(filePath)) {
+          await unlink(filePath);
+        } else {
+          console.warn(`File not found at path: ${filePath}, removing reference from DB anyway.`);
+        }
+      } catch (err) {
+        console.error('Error deleting file properties:', err);
+        // Continue to remove from DB even if file delete fails (or maybe it was already gone)
+      }
+
+      // Remove from map
+      agent.documents.delete(documentName);
+      agent.markModified('documents');
+
+      await agent.save();
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id, { action: 'delete_document', document: documentName }, {}, req);
+
+      return ResponseHandler.success(res, 'Document deleted successfully', {
+        agent,
+        documents: agent.documents
+      });
+
+    } catch (error) {
+      logger.error('Delete document error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to delete document', error);
+    }
+  }
 }
 
 module.exports = AgentController;
