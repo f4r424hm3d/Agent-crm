@@ -172,3 +172,14 @@ export default {
   DOCUMENT_TYPES,
   COUNTRIES,
 };
+
+// Required Agent Documents
+export const REQUIRED_AGENT_DOCUMENTS = [
+  { key: 'idProof', label: 'ID Proof' },
+  { key: 'companyLicence', label: 'Company Licence' },
+  { key: 'agentPhoto', label: 'Agent Photo' },
+  { key: 'companyPhoto', label: 'Company Photo' },
+  { key: 'identityDocument', label: 'Identity Document' },
+  { key: 'companyRegistration', label: 'Company Registration' },
+  { key: 'resume', label: 'Resume / CV' }
+];

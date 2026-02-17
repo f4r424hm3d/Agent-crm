@@ -5,11 +5,12 @@ import {
     User, UserCircle2, Home, ChevronLeft, Mail, Calendar,
     Briefcase, Phone, MapPin, Building, Shield, Globe,
     Users, TrendingUp, Award, FileText, CheckCircle2,
-    XCircle, Clock, Save, Edit2, X, Upload, ExternalLink
+    XCircle, Clock, Save, Edit2, X, Upload, ExternalLink, AlertCircle
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import agentService from '../../services/agentService';
 import { useToast } from '../../components/ui/toast';
+import AgentDocumentUpload from '../../components/agents/AgentDocumentUpload';
 
 const DataField = ({ label, value, isEditing, onChange, type = "text", placeholder, options, icon: Icon, mono = false, disabled = false, maxHint }) => (
     <div className="space-y-1">
@@ -57,12 +58,30 @@ const DataField = ({ label, value, isEditing, onChange, type = "text", placehold
     </div>
 );
 
-const SectionHeader = ({ title, icon: Icon }) => (
+const SectionHeader = ({ title, icon: Icon, isEditing, onEdit, onSave, onCancel }) => (
     <div className="bg-gray-100/50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
         <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
             <Icon className="text-blue-600 w-5 h-5" />
             {title}
         </h3>
+        {onEdit && (
+            <div className="flex gap-2">
+                {isEditing ? (
+                    <>
+                        <button onClick={onSave} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">
+                            <Save className="w-4 h-4" />
+                        </button>
+                        <button onClick={onCancel} className="p-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">
+                            <X className="w-4 h-4" />
+                        </button>
+                    </>
+                ) : (
+                    <button onClick={onEdit} className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition">
+                        <Edit2 className="w-4 h-4" />
+                    </button>
+                )}
+            </div>
+        )}
     </div>
 );
 
@@ -75,13 +94,7 @@ const AgentProfile = () => {
     const [activeSection, setActiveSection] = useState('overview');
     const [editMode, setEditMode] = useState({});
     const [editData, setEditData] = useState({});
-
-    // Document Upload State
-    const [uploadingDocKey, setUploadingDocKey] = useState(null);
-    const [uploadingDoc, setUploadingDoc] = useState(false);
-    const [newDocName, setNewDocName] = useState('');
-    const [newDocFile, setNewDocFile] = useState(null);
-    const fileInputRef = useRef(null);
+    const [missingDocs, setMissingDocs] = useState([]);
 
     // Refs for scrolling
     const sectionRefs = {
@@ -92,85 +105,21 @@ const AgentProfile = () => {
         documents: useRef(null)
     };
 
-    const handleFileSelect = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            if (file.size > 5 * 1024 * 1024) {
-                toast.error("File size must be less than 5MB");
-                return;
-            }
-            setNewDocFile(file);
-        }
-    };
-
-    const handleMissingFileSelect = (key) => {
-        setUploadingDocKey(key);
-        if (fileInputRef.current) {
-            fileInputRef.current.click();
-        }
-    };
-
-    const handleMissingFileUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file || !uploadingDocKey) return;
-
-        if (file.size > 5 * 1024 * 1024) {
-            toast.error("File size must be less than 5MB");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('documentName', uploadingDocKey);
-        formData.append('file', file);
-
-        try {
-            setLoading(true);
-            const userId = user?.id || user?._id;
-            await agentService.uploadDocument(userId, formData);
-            toast.success("Document uploaded successfully");
-            fetchAgentProfile(userId);
-        } catch (error) {
-            console.error("Upload failed", error);
-            toast.error("Failed to upload document");
-        } finally {
-            setLoading(false);
-            setUploadingDocKey(null);
-            e.target.value = null;
-        }
-    };
-
-    const handleGeneralUpload = async () => {
-        if (!newDocName || !newDocFile) {
-            toast.error("Please provide both document name and file");
-            return;
-        }
-
-        const formData = new FormData();
-        formData.append('documentName', newDocName);
-        formData.append('file', newDocFile);
-
-        try {
-            setUploadingDoc(true);
-            const userId = user?.id || user?._id;
-            await agentService.uploadDocument(userId, formData);
-            toast.success("Document uploaded successfully");
-            setNewDocName('');
-            setNewDocFile(null);
-            fetchAgentProfile(userId);
-        } catch (error) {
-            console.error("Upload failed", error);
-            toast.error("Failed to upload document");
-        } finally {
-            setUploadingDoc(false);
-        }
-    };
-
     useEffect(() => {
         const userId = user?.id || user?._id;
         if (userId) {
             fetchAgentProfile(userId);
         }
     }, [user?.id, user?._id]);
+
+    useEffect(() => {
+        if (agentData) {
+            const requiredDocs = ['idProof', 'companyLicence', 'agentPhoto', 'companyPhoto', 'identityDocument', 'companyRegistration', 'resume'];
+            const uploadedDocs = agentData.documents ? Object.keys(agentData.documents).filter(k => agentData.documents[k]) : [];
+            const missing = requiredDocs.filter(doc => !uploadedDocs.includes(doc));
+            setMissingDocs(missing);
+        }
+    }, [agentData]);
 
     const fetchAgentProfile = async (userId) => {
         try {
@@ -187,33 +136,76 @@ const AgentProfile = () => {
         }
     };
 
+    const getScrollContainer = () => {
+        // Target the main layout container which has overflow-y-auto
+        return document.querySelector('.h-screen.overflow-y-auto') || window;
+    };
+
     const handleScroll = () => {
-        const scrollPosition = window.scrollY + 200;
+        const container = getScrollContainer();
+        // If container is window, use window.scrollY, else container.scrollTop
+        const scrollData = container === window ? window.scrollY : container.scrollTop;
+        const scrollPosition = scrollData + 200; // Offset for trigger
+
         for (const [section, ref] of Object.entries(sectionRefs)) {
-            if (ref.current &&
-                scrollPosition >= ref.current.offsetTop &&
-                scrollPosition < ref.current.offsetTop + ref.current.offsetHeight) {
-                setActiveSection(section);
-                break;
+            if (ref.current) {
+                // For elements within a scrollable container, using offsetTop might be relative to offsetParent.
+                // A safer calculation for a scrollable container context:
+                // element.getBoundingClientRect().top + container.scrollTop
+                // But container is the relative text.
+                // Let's stick to simple logic: match against offsetTop if the container is the offsetParent.
+                // If the container is position:fixed/relative, it is the offsetParent.
+                // The DashboardLayout div doesn't have position relative, so offsetParent might be body.
+                // Let's use getBoundingClientRect which is viewport relative.
+
+                // Container Top (viewport relative)
+                const containerRect = container === window ? { top: 0 } : container.getBoundingClientRect();
+                const elementRect = ref.current.getBoundingClientRect();
+
+                // Element top relative to container
+                const relativeTop = elementRect.top - containerRect.top;
+
+                // If the element is near the top of the container (e.g. within 200px)
+                if (relativeTop <= 200 && relativeTop > -ref.current.offsetHeight) {
+                    setActiveSection(section);
+                    break;
+                }
             }
         }
     };
 
     useEffect(() => {
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
+        const container = getScrollContainer();
+        container.addEventListener('scroll', handleScroll);
+        // Initial check
+        handleScroll();
+        return () => container.removeEventListener('scroll', handleScroll);
     }, []);
 
     const scrollToSection = (sectionId) => {
         const element = sectionRefs[sectionId].current;
-        if (element) {
+        const container = getScrollContainer();
+
+        if (element && container) {
             const offset = 100;
-            const elementPosition = element.getBoundingClientRect().top;
-            const offsetPosition = elementPosition + window.pageYOffset - offset;
-            window.scrollTo({
-                top: offsetPosition,
-                behavior: "smooth"
-            });
+            // For scrollable container:
+            if (container !== window) {
+                const containerRect = container.getBoundingClientRect();
+                const elementRect = element.getBoundingClientRect();
+                // Current scroll + distance from container top - offset
+                const targetScroll = container.scrollTop + (elementRect.top - containerRect.top) - offset;
+                container.scrollTo({
+                    top: targetScroll,
+                    behavior: "smooth"
+                });
+            } else {
+                const elementPosition = element.getBoundingClientRect().top;
+                const offsetPosition = elementPosition + window.pageYOffset - offset;
+                window.scrollTo({
+                    top: offsetPosition,
+                    behavior: "smooth"
+                });
+            }
         }
     };
 
@@ -259,6 +251,26 @@ const AgentProfile = () => {
         );
     }
 
+    if (!agentData) {
+        return (
+            <div className="flex justify-center items-center min-h-[60vh] bg-gray-50 p-4">
+                <div className="text-center p-8 bg-white rounded-2xl shadow-lg border border-red-100 max-w-md">
+                    <div className="w-16 h-16 bg-red-50 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <XCircle className="w-8 h-8" />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 mb-2">Failed to Load Profile</h2>
+                    <p className="text-gray-500 mb-6 text-sm">We ran into an issue loading your profile data. Please try again or contact support.</p>
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="px-6 py-2.5 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition-all text-sm"
+                    >
+                        Reload Page
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     const navItems = [
         { id: 'overview', label: 'Overview', icon: User },
         { id: 'company', label: 'Company', icon: Building },
@@ -285,7 +297,7 @@ const AgentProfile = () => {
                     className="flex items-center gap-3 px-6 py-3 bg-white text-gray-700 rounded-2xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-black text-sm"
                 >
                     <ChevronLeft className="w-5 h-5" />
-                    Back to Dashboard
+                    Back
                 </button>
                 <div className="flex items-center gap-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(agentData?.approvalStatus)}`}>
@@ -297,7 +309,7 @@ const AgentProfile = () => {
             </div>
 
             {/* Sticky Navigation */}
-            <div className="sticky top-0 z-40 -mx-4 px-4 py-2 bg-gray-50/80 backdrop-blur-xl border-b border-gray-200/50">
+            <div className="">
                 <div className="bg-white/90 p-1.5 rounded-2xl border border-gray-200 shadow-xl shadow-gray-200/50 max-w-4xl mx-auto flex overflow-x-auto no-scrollbar gap-1">
                     {navItems.map((item) => (
                         <button
@@ -315,6 +327,32 @@ const AgentProfile = () => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                {/* Missing Documents Alert - Full Width */}
+                {missingDocs.length > 0 && (
+                    <div className="lg:col-span-12 mb-2 bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="p-2 bg-amber-100 rounded-full text-amber-600 shrink-0">
+                            <AlertCircle className="w-6 h-6" />
+                        </div>
+                        <div>
+                            <h4 className="text-lg font-bold text-amber-900 mb-1">Action Required: Complete Your Profile</h4>
+                            <p className="text-sm text-amber-700 mb-2">Your profile is missing the following required documents. Please upload them to ensure your account is verified and approved.</p>
+                            <div className="flex flex-wrap gap-2">
+                                {missingDocs.map(doc => (
+                                    <span key={doc} className="px-2 py-1 bg-amber-100 text-amber-800 text-xs font-bold rounded-md border border-amber-200 capitalize">
+                                        {doc.replace(/([A-Z])/g, ' $1').trim()}
+                                    </span>
+                                ))}
+                            </div>
+                            <button
+                                onClick={() => scrollToSection('documents')}
+                                className="mt-3 text-sm font-bold text-amber-800 hover:text-amber-900 underline decoration-2 underline-offset-2"
+                            >
+                                Jump to Documents Section &rarr;
+                            </button>
+                        </div>
+                    </div>
+                )}
+
                 {/* Left Sidebar Card */}
                 <div ref={sectionRefs.overview} className="lg:col-span-4 sticky top-20 w-full space-y-6">
                     <div className="bg-white rounded-2xl shadow-2xl shadow-gray-200/50 border border-gray-100 overflow-hidden w-full">
@@ -685,160 +723,16 @@ const AgentProfile = () => {
 
                     {/* Section: Documents */}
                     <div ref={sectionRefs.documents} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="bg-gray-100/50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-                            <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-                                <FileText className="text-blue-600 w-5 h-5" />
-                                Verification Vault
-                            </h3>
-                            <input
-                                type="file"
-                                ref={fileInputRef}
-                                className="hidden"
-                                onChange={handleMissingFileUpload}
-                                accept=".pdf,.jpg,.jpeg,.png"
+                        <SectionHeader
+                            title="Verification Vault"
+                            icon={FileText}
+                        />
+                        <div className="p-8">
+                            <AgentDocumentUpload
+                                agent={agentData}
+                                onUploadSuccess={() => fetchAgentProfile(agentData._id || agentData.id)}
+                                isAdmin={false}
                             />
-                        </div>
-                        <div className="p-8 space-y-6">
-                            {/* Guidance & Info */}
-                            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-                                <h4 className="text-sm font-bold text-blue-800 mb-2 flex items-center gap-2">
-                                    <Shield className="w-4 h-4" /> Required Verification Documents
-                                </h4>
-                                <p className="text-xs text-blue-700 leading-relaxed">
-                                    To verify your partnership status, please ensure the following documents are uploaded.
-                                    Clear, legible scans or photos are required.
-                                </p>
-                                <ul className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-blue-800 font-medium">
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> ID Proof</li>
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Identity Document</li>
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Licence</li>
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Registration</li>
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Agent Photo</li>
-                                    <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-blue-500" /> Company Photo</li>
-                                </ul>
-                            </div>
-
-                            {/* Upload Document Section */}
-                            <div className="border-2 border-dashed border-blue-200 rounded-2xl p-6 bg-blue-50/30">
-                                <h4 className="text-sm font-black text-gray-800 mb-4 flex items-center gap-2">
-                                    <Upload className="w-4 h-4 text-blue-600" />
-                                    Upload New Document
-                                </h4>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
-                                            Document Name
-                                        </label>
-                                        <input
-                                            type="text"
-                                            placeholder="e.g. Award Certificate, License"
-                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
-                                            value={newDocName}
-                                            onChange={(e) => setNewDocName(e.target.value)}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-2 block">
-                                            Select File
-                                        </label>
-                                        <input
-                                            type="file"
-                                            accept=".pdf,.jpg,.jpeg,.png"
-                                            onChange={handleFileSelect}
-                                            className="w-full px-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                        />
-                                    </div>
-                                </div>
-                                <button
-                                    onClick={handleGeneralUpload}
-                                    disabled={uploadingDoc || !newDocName || !newDocFile}
-                                    className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-                                >
-                                    {uploadingDoc ? (
-                                        <>
-                                            <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                                            </svg>
-                                            Uploading...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Save className="w-4 h-4" />
-                                            Save Document
-                                        </>
-                                    )}
-                                </button>
-                            </div>
-
-                            {/* Missing Documents Section */}
-                            {(() => {
-                                const mandatoryDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'companyPhoto'];
-                                const uploadedDocs = agentData?.documents ? Object.keys(agentData.documents) : [];
-                                const missing = mandatoryDocs.filter(doc => !uploadedDocs.includes(doc));
-
-                                if (missing.length === 0) return null;
-
-                                return (
-                                    <div className="bg-red-50 border border-red-100 rounded-xl p-4 mb-6">
-                                        <h4 className="text-sm font-bold text-red-800 flex items-center gap-2 mb-3">
-                                            <Shield className="w-4 h-4" /> Action Required: Missing Documents
-                                        </h4>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                            {missing.map(key => (
-                                                <button
-                                                    key={key}
-                                                    onClick={() => handleFileSelect(key)}
-                                                    className="flex items-center justify-between p-3 bg-white border border-red-200 rounded-lg hover:bg-red-50 transition-colors group text-left"
-                                                >
-                                                    <span className="text-sm font-medium text-red-700">
-                                                        Upload {key.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase())}
-                                                    </span>
-                                                    <Upload className="w-4 h-4 text-red-400 group-hover:text-red-600" />
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {(!agentData?.documents || Object.keys(agentData.documents).length === 0) ? (
-                                    <div className="md:col-span-2 py-10 flex flex-col items-center justify-center text-gray-400 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
-                                        <FileText className="w-12 h-12 mb-2 opacity-20" />
-                                        <p className="font-medium">No documents uploaded</p>
-                                        <p className="text-xs">Upload company registration or ID proof</p>
-                                    </div>
-                                ) : (
-                                    Object.entries(agentData.documents).map(([key, url]) => {
-                                        if (!url || typeof url !== 'string') return null;
-                                        // Format key to readable label
-                                        const label = key.replace(/([A-Z])/g, ' $1').trim().replace(/^./, str => str.toUpperCase());
-
-                                        return (
-                                            <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 group">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600">
-                                                        <FileText className="w-5 h-5" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-bold text-gray-700 truncate max-w-[150px]">{label}</p>
-                                                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Verified Document</p>
-                                                    </div>
-                                                </div>
-                                                <a
-                                                    href={`http://localhost:5000/${url}`}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                                                >
-                                                    <ExternalLink className="w-4 h-4" />
-                                                </a>
-                                            </div>
-                                        )
-                                    })
-                                )}
-                            </div>
                         </div>
                     </div>
                 </div>

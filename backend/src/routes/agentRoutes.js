@@ -56,9 +56,37 @@ router.post(
     body('lastName').trim().notEmpty().withMessage('Last Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('companyName').trim().notEmpty().withMessage('Company name is required'),
+    body('registrationNumber').trim().notEmpty().withMessage('Company Registration Number is required'),
+    body('website').trim().notEmpty().withMessage('Website is required'),
   ],
   validateRequest,
   AgentController.createAgent
+);
+
+/**
+ * @route   POST /api/agents/:id/documents/bulk
+ * @desc    Upload multiple agent documents
+ * @access  Private (Admin, Super Admin)
+ */
+const { upload } = require('../config/multer'); // Use standard config or define appropriate multer here
+// Assuming we need a multer instance that handles 'any' or specific fields.
+// Since specific fields are used in frontend:
+const bulkUpload = upload.fields([
+  { name: 'idProof', maxCount: 1 },
+  { name: 'companyLicence', maxCount: 1 },
+  { name: 'agentPhoto', maxCount: 1 },
+  { name: 'identityDocument', maxCount: 1 },
+  { name: 'companyRegistration', maxCount: 1 },
+  { name: 'resume', maxCount: 1 },
+  { name: 'companyPhoto', maxCount: 1 }
+]);
+
+router.post(
+  '/:id/documents/bulk',
+  authMiddleware,
+  roleMiddleware(roles.ALL_ADMINS),
+  bulkUpload,
+  AgentController.uploadBulkDocuments
 );
 
 /**

@@ -39,7 +39,7 @@ import RoleForm from "./pages/admin/RoleForm";
 
 // Agent Pages
 import AgentList from "./pages/agents/AgentList";
-import AgentDetails from "./pages/agents/AgentDetails";
+
 import AgentDetailView from "./pages/agents/AgentDetailView";
 import Settings from './pages/admin/Settings';
 import PendingAgents from "./pages/agents/PendingAgents";
@@ -73,7 +73,6 @@ import RequireReferral from "./components/guards/RequireReferral";
 // Application Pages
 import ApplicationList from "./pages/applications/ApplicationList";
 import ApplicationForm from "./pages/applications/ApplicationForm";
-import ApplicationDetails from "./pages/applications/ApplicationDetails";
 import AppliedStudents from "./pages/applications/AppliedStudents";
 import PendingStudents from "./pages/applications/PendingStudents";
 import ProgramSelectionFlow from "./pages/applications/ProgramSelectionFlow";
@@ -89,6 +88,12 @@ import AgentEarnings from "./pages/payouts/AgentEarnings";
 
 // Audit Log Pages
 import AuditLogList from "./pages/audit-logs/AuditLogList";
+
+// Brochure Pages
+import BrochureTypes from "./pages/brochure/BrochureTypes";
+import BrochureCategories from "./pages/brochure/BrochureCategories";
+import UniversityPrograms from "./pages/brochure/UniversityPrograms";
+import BrochureDetail from "./pages/brochure/BrochureDetail";
 
 // Other Pages
 import Profile from "./pages/Profile";
@@ -310,7 +315,7 @@ function AppContent() {
           path="agents/:id"
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
-              <AgentDetails />
+              <AgentDetailView />
             </ProtectedRoute>
           }
         />
@@ -452,14 +457,6 @@ function AppContent() {
           }
         />
         <Route
-          path="applications/:id"
-          element={
-            <ProtectedRoute>
-              <ApplicationDetails />
-            </ProtectedRoute>
-          }
-        />
-        <Route
           path="applied-students"
           element={
             <ProtectedRoute
@@ -558,6 +555,40 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]}>
               <AuditLogList />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Brochures */}
+        <Route
+          path="brochure/types"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureTypes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/categories"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureCategories />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/university-programs"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <UniversityPrograms />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/university/:upId"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureDetail />
             </ProtectedRoute>
           }
         />

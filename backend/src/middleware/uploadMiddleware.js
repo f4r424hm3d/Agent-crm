@@ -56,7 +56,45 @@ const validateRequiredDocuments = (req, res, next) => {
     next();
 };
 
+/**
+ * Middleware to strictly validate ALL required documents for public registration
+ */
+const validateRegistrationDocuments = (req, res, next) => {
+    const requiredFields = [
+        'idProof',
+        'companyLicence',
+        'agentPhoto',
+        'companyPhoto',
+        'identityDocument',
+        'companyRegistration',
+        'resume'
+    ];
+
+    // Check if files exist at all
+    if (!req.files || Object.keys(req.files).length === 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'All documents are required for registration.',
+            missingDocuments: requiredFields
+        });
+    }
+
+    const uploadedFields = Object.keys(req.files);
+    const missingFields = requiredFields.filter(field => !uploadedFields.includes(field));
+
+    if (missingFields.length > 0) {
+        return res.status(400).json({
+            success: false,
+            message: 'All documents are strictly required for public registration',
+            missingDocuments: missingFields
+        });
+    }
+
+    next();
+};
+
 module.exports = {
     validateFileSizes,
-    validateRequiredDocuments
+    validateRequiredDocuments,
+    validateRegistrationDocuments
 };

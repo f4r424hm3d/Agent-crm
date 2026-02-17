@@ -249,69 +249,117 @@ class InquiryController {
             // Get agent details from request body
             const { firstName, lastName, tempAgentId } = req.body;
 
-            if (!firstName || !lastName) {
-                return ResponseHandler.badRequest(res, 'First name and last name are required');
+            // Allow upload even if we only have ID (for updates), but ideally we need names for folder creation
+            // if folder doesn't exist.
+            if (!tempAgentId && (!firstName || !lastName)) {
+                return ResponseHandler.badRequest(res, 'Agent ID or Name details are required');
             }
 
-            // Create folder name: YYYYMMDD_tempId_FirstName_LastName
-            const today = new Date();
-            const dateString = today.toISOString().split('T')[0].replace(/-/g, ''); // YYYYMMDD
-            const folderName = `${dateString}_${tempAgentId || Date.now()}_${firstName}_${lastName}`;
-            const agentFolder = path.join(__dirname, '../../uploads/agents', folderName);
+            const agentsBaseDir = path.join(__dirname, '../../uploads/agents');
+            let agentFolder;
+            let folderName;
 
-            // Create agent-specific folder
-            if (!fs.existsSync(agentFolder)) {
-                fs.mkdirSync(agentFolder, { recursive: true });
+            // 1. Try to find existing agent to get their folder
+            let existingAgent = null;
+            if (tempAgentId && tempAgentId.match(/^[0-9a-fA-F]{24}$/)) {
+                try {
+                    existingAgent = await Agent.findOne({ _id: tempAgentId });
+                } catch (e) { /* ignore invalid id */ }
             }
 
-            // Process uploaded files
-            const documentPaths = {};
+            // 2. Determine Folder Path from existing agent
+            if (existingAgent && existingAgent.documents && existingAgent.documents.size > 0) {
+                // Try to extract folder from existing documents
+                // Values are like "uploads/agents/FOLDER_NAME/docs/file.ext"
+                const firstDocPath = Array.from(existingAgent.documents.values())[0];
+                if (firstDocPath) {
+                    const parts = firstDocPath.split('/');
+                    const agentIndex = parts.indexOf('agents');
+                    if (agentIndex !== -1 && parts[agentIndex + 1]) {
+                        folderName = parts[agentIndex + 1];
+                        agentFolder = path.join(agentsBaseDir, folderName);
+                    }
+                }
+            }
+
+            // If no existing folder found (or new agent), create new stable one
+            if (!agentFolder || !fs.existsSync(agentFolder)) {
+                // Sanitize names for folder
+                // Use provided names or fallback to existing agent names if available
+                const fName = firstName || (existingAgent ? existingAgent.firstName : 'Unknown');
+                const lName = lastName || (existingAgent ? existingAgent.lastName : 'Agent');
+
+                const safeFirst = fName.replace(/[^a-z0-9]/gi, '');
+                const safeLast = lName.replace(/[^a-z0-9]/gi, '');
+
+                // Format: {time}_{agentid}_{agentname}
+                // Using Date.now() for time prefix, then ID, then Name.
+                // Assuming "time" means timestamp of creation to keep folder unique.
+                const timestamp = Date.now();
+                folderName = `${timestamp}_${tempAgentId || 'new'}_${safeFirst}${safeLast}`;
+                agentFolder = path.join(agentsBaseDir, folderName);
+            }
+
+            // Create directories: Root, docs, and old/docs
+            const docsFolder = path.join(agentFolder, 'docs');
+            const oldDocsFolder = path.join(agentFolder, 'old', 'docs');
+
+            if (!fs.existsSync(agentFolder)) fs.mkdirSync(agentFolder, { recursive: true });
+            if (!fs.existsSync(docsFolder)) fs.mkdirSync(docsFolder, { recursive: true });
+            if (!fs.existsSync(oldDocsFolder)) fs.mkdirSync(oldDocsFolder, { recursive: true });
+
             const files = req.files;
-
             if (!files || Object.keys(files).length === 0) {
-                return ResponseHandler.badRequest(res, 'No files uploaded');
+                // Return success with empty data if no files uploaded (optional upload)
+                return ResponseHandler.success(res, 'No new documents to upload', { documentPaths: {}, folderName });
             }
 
-            // Move files from temp location to agent folder and store paths
+            const documentPaths = {};
+
             for (const [fieldName, fileArray] of Object.entries(files)) {
                 const file = fileArray[0];
                 const ext = path.extname(file.originalname);
-                let newFileName;
 
-                // Set proper file names
+                // Determine new filename
+                let newFileName;
                 switch (fieldName) {
-                    case 'idProof':
-                        newFileName = `id_proof${ext}`;
-                        break;
-                    case 'companyLicence':
-                        newFileName = `company_licence${ext}`;
-                        break;
-                    case 'agentPhoto':
-                        newFileName = `agent_photo${ext}`;
-                        break;
-                    case 'identityDocument':
-                        newFileName = `identity_document${ext}`;
-                        break;
-                    case 'companyRegistration':
-                        newFileName = `company_registration${ext}`;
-                        break;
-                    case 'resume':
-                        newFileName = `resume${ext}`;
-                        break;
-                    case 'companyPhoto':
-                        newFileName = `company_photo${ext}`;
-                        break;
-                    default:
-                        newFileName = `${fieldName}${ext}`;
+                    case 'idProof': newFileName = `id_proof${ext}`; break;
+                    case 'companyLicence': newFileName = `company_licence${ext}`; break;
+                    case 'agentPhoto': newFileName = `agent_photo${ext}`; break;
+                    case 'companyPhoto': newFileName = `company_photo${ext}`; break;
+                    case 'identityDocument': newFileName = `identity_document${ext}`; break;
+                    case 'companyRegistration': newFileName = `company_registration${ext}`; break;
+                    case 'resume': newFileName = `resume${ext}`; break;
+                    default: newFileName = `${fieldName}${ext}`;
                 }
 
-                const newPath = path.join(agentFolder, newFileName);
+                const targetPath = path.join(docsFolder, newFileName);
 
-                // Move file from temp location to agent folder
-                fs.renameSync(file.path, newPath);
+                // 3. Handle Archiving: If file exists in 'docs', move to 'old/docs'
+                if (fs.existsSync(targetPath)) {
+                    // Append timestamp to archived file name
+                    const archiveFileName = `${path.basename(newFileName, ext)}_${Date.now()}${ext}`;
+                    const archivePath = path.join(oldDocsFolder, archiveFileName);
 
-                // Store relative path for database
-                documentPaths[fieldName] = `uploads/agents/${folderName}/${newFileName}`;
+                    try {
+                        fs.renameSync(targetPath, archivePath);
+                    } catch (err) {
+                        console.error(`Failed to archive file ${newFileName}:`, err);
+                    }
+                }
+
+                // Move new file to 'docs' folder
+                try {
+                    fs.renameSync(file.path, targetPath);
+                } catch (err) {
+                    console.error("Error moving file:", err);
+                    // Fallback copy/delete
+                    fs.copyFileSync(file.path, targetPath);
+                    fs.unlinkSync(file.path);
+                }
+
+                // Store relative path (pointing to /docs/)
+                documentPaths[fieldName] = `uploads/agents/${folderName}/docs/${newFileName}`;
             }
 
             return ResponseHandler.success(res, 'Documents uploaded successfully', {
@@ -321,6 +369,12 @@ class InquiryController {
 
         } catch (error) {
             console.error('Upload Documents Error:', error);
+            // Cleanup temp files if any
+            if (req.files) {
+                Object.values(req.files).flat().forEach(f => {
+                    try { if (fs.existsSync(f.path)) fs.unlinkSync(f.path); } catch (e) { }
+                });
+            }
             return ResponseHandler.serverError(res, 'Failed to upload documents.', error);
         }
     }

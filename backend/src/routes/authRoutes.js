@@ -68,8 +68,24 @@ router.post(
  * @desc    Register new agent
  * @access  Public
  */
+const { upload } = require('../config/multer');
+const { validateFileSizes, validateRegistrationDocuments } = require('../middleware/uploadMiddleware');
+
+const bulkUpload = upload.fields([
+  { name: 'idProof', maxCount: 1 },
+  { name: 'companyLicence', maxCount: 1 },
+  { name: 'agentPhoto', maxCount: 1 },
+  { name: 'identityDocument', maxCount: 1 },
+  { name: 'companyRegistration', maxCount: 1 },
+  { name: 'resume', maxCount: 1 },
+  { name: 'companyPhoto', maxCount: 1 }
+]);
+
 router.post(
   '/register-agent',
+  bulkUpload,
+  validateFileSizes,
+  validateRegistrationDocuments,
   [
     body('name').trim().notEmpty().withMessage('Name is required'),
     body('email').isEmail().withMessage('Valid email is required'),

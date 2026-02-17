@@ -83,6 +83,16 @@ export const agentService = {
     return response.data;
   },
 
+  // Upload bulk documents
+  uploadBulkDocuments: async (id, formData) => {
+    const response = await apiClient.post(`/agents/${id}/documents/bulk`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data', // Axios usually sets this automatically with FormData, but good to be explicit or let it handle boundary
+      },
+    });
+    return response.data;
+  },
+
   // Get agent universities
   getAgentUniversities: async (id) => {
     const response = await apiClient.get(`/agents/${id}/universities`);

@@ -13,6 +13,11 @@ const Payout = require('./Payout');
 const AuditLog = require('./AuditLog');
 const Setting = require('./Setting');
 const Counter = require('./Counter');
+const CountryDetail = require('./CountryDetail');
+const BrochureType = require('./BrochureType');
+const BrochureCategory = require('./BrochureCategory');
+const UniversityProgram = require('./UniversityProgram');
+const Brochure = require('./Brochure');
 
 // No need to define associations in Mongoose
 // Relationships are handled via refs and populate()
@@ -29,5 +34,10 @@ module.exports = {
   Payout,
   AuditLog,
   Setting,
-  Counter
+  Counter,
+  CountryDetail,
+  BrochureType,
+  BrochureCategory,
+  UniversityProgram,
+  Brochure
 };

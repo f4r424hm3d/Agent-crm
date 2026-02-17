@@ -91,6 +91,15 @@ const Sidebar = ({ isOpen, onClose }) => {
               { path: "/pending-applications", label: "Pending Applications" },
             ],
           },
+          {
+            label: "Brochure Management",
+            icon: FiFileText,
+            subItems: [
+              { path: "/brochure/types", label: "Brochure Types" },
+              { path: "/brochure/categories", label: "Brochure Category" },
+              { path: "/brochure/university-programs", label: "University and Program" },
+            ],
+          },
           { path: "/commissions", icon: FiDollarSign, label: "Commissions" },
           { path: "/payouts", icon: FiTrendingUp, label: "Payouts" },
           { path: "/staff", icon: FiUsers, label: "Staff Management" },
@@ -120,6 +129,15 @@ const Sidebar = ({ isOpen, onClose }) => {
             subItems: [
               { path: "/applied-students", label: "Applied Students" },
               { path: "/pending-applications", label: "Pending Applications" },
+            ],
+          },
+          {
+            label: "Brochure Management",
+            icon: FiFileText,
+            subItems: [
+              { path: "/brochure/types", label: "Brochure Types" },
+              { path: "/brochure/categories", label: "Brochure Category" },
+              { path: "/brochure/university-programs", label: "University and Program" },
             ],
           },
           { path: "/commissions", icon: FiDollarSign, label: "Commissions" },
@@ -152,7 +170,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         return [
           { path: "/dashboard", icon: FiHome, label: "Dashboard" },
           { path: "/my-applications", icon: FiFileText, label: "Applied Colleges" },
-          { onClick: () => { }, icon: FiHeart, label: "Shortlisted Colleges" },
+          // { onClick: () => { }, icon: FiHeart, label: "Shortlisted Colleges" },
           { path: "/profile", icon: FiUserCheck, label: "Profile" },
           { path: "/change-password", icon: FiLock, label: "Change Password" },
           { icon: FiLogOut, label: "Logout", onClick: handleLogoutConfirm },

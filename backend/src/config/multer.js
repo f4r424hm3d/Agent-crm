@@ -17,20 +17,20 @@ const FILE_SIZE_LIMITS = {
 // Configure storage
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        // Folder will be created in middleware after we have agent details
-        const baseDir = path.join(__dirname, '../../documents/agents');
+        // Store in temp folder first, will be moved by controller/service
+        const tempDir = path.join(__dirname, '../../uploads/temp');
 
-        // Ensure base directory exists
-        if (!fs.existsSync(baseDir)) {
-            fs.mkdirSync(baseDir, { recursive: true });
+        // Ensure temp directory exists
+        if (!fs.existsSync(tempDir)) {
+            fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        cb(null, baseDir);
+        cb(null, tempDir);
     },
     filename: function (req, file, cb) {
-        // Temporary filename, will be moved to proper location in controller
+        // Temporary filename
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+        cb(null, `temp-${file.fieldname}-${uniqueSuffix}${path.extname(file.originalname)}`);
     }
 });
 

@@ -61,7 +61,7 @@ const Login = () => {
     try {
       const response = await authService.login(formData);
       dispatch(loginSuccess(response));
-      toast.success("Successfully Login");
+      toast.success("Welcome back! We're getting everything ready for you.");
       navigate("/dashboard");
     } catch (err) {
       dispatch(loginFailure(err.response?.data?.message || "Login failed"));
