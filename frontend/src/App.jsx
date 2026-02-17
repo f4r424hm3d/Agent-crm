@@ -89,6 +89,12 @@ import AgentEarnings from "./pages/payouts/AgentEarnings";
 // Audit Log Pages
 import AuditLogList from "./pages/audit-logs/AuditLogList";
 
+// Brochure Pages
+import BrochureTypes from "./pages/brochure/BrochureTypes";
+import BrochureCategories from "./pages/brochure/BrochureCategories";
+import UniversityPrograms from "./pages/brochure/UniversityPrograms";
+import BrochureDetail from "./pages/brochure/BrochureDetail";
+
 // Other Pages
 import Profile from "./pages/Profile";
 import Unauthorized from "./pages/Unauthorized";
@@ -549,6 +555,40 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]}>
               <AuditLogList />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Brochures */}
+        <Route
+          path="brochure/types"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureTypes />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/categories"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureCategories />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/university-programs"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <UniversityPrograms />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="brochure/university/:upId"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <BrochureDetail />
             </ProtectedRoute>
           }
         />

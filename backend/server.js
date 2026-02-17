@@ -24,7 +24,7 @@ app.use(cookieParser());
 // Rate limiting - Increased for development
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 900000, // 15 minutes
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 1000, // Increased to 1000 for development
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 5000, // Increased to 5000 for development
   message: 'Too many requests from this IP, please try again later.',
 });
 app.use('/api/', limiter);
@@ -108,6 +108,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/inquiry', inquiryRoutes);
 app.use('/api/external-search', require('./src/routes/externalApiRoutes'));
 app.use('/api/upload', require('./src/routes/uploadRoutes'));
+app.use('/api/countries', require('./src/routes/countryDetailRoutes'));
+app.use('/api/brochures', require('./src/routes/brochureRoutes'));
 
 // Serve static files
 const path = require('path');
@@ -117,7 +119,7 @@ app.use('/uploads/documents/students', express.static(path.join(__dirname, 'uplo
 // Fix for legacy wrong URLs (map /uploads/documents -> upload/student/documents)
 app.use('/uploads/documents', express.static(path.join(__dirname, 'upload/student/documents')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-app.use('/documents', express.static(path.join(__dirname, 'documents')));
+app.use('/documents', express.static(path.join(__dirname, 'uploads/documents')));
 
 // 404 handler
 app.use((req, res) => {
