@@ -11,21 +11,21 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
 } from '../ui/alert-dialog';
-import agentService from '../../services/agentService';
-import { REQUIRED_AGENT_DOCUMENTS } from '../../utils/constants';
+import studentService from '../../services/studentService';
+import { REQUIRED_STUDENT_DOCUMENTS } from '../../utils/constants';
 
-const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
+const StudentDocumentUpload = ({ student, onUploadSuccess, isAdmin = false }) => {
     const toast = useToast();
     const [uploadingDoc, setUploadingDoc] = useState(false);
-    const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [deleteConfirm, setDeleteConfirm] = useState(null); // Key of doc to delete
     const [docName, setDocName] = useState('');
     const [docKey, setDocKey] = useState(''); // Hidden key for smart selection
     const [file, setFile] = useState(null);
     const fileInputRef = useRef(null);
 
     // Calculate missing documents
-    const uploadedKeys = agent?.documents ? Object.keys(agent.documents).filter(key => agent.documents[key]) : [];
-    const missingDocs = REQUIRED_AGENT_DOCUMENTS.filter(doc => !uploadedKeys.includes(doc.key));
+    const uploadedKeys = student?.documents ? Object.keys(student.documents).filter(key => student.documents[key]) : [];
+    const missingDocs = REQUIRED_STUDENT_DOCUMENTS.filter(doc => !uploadedKeys.includes(doc.key));
 
     const handleFileSelect = (e) => {
         const selectedFile = e.target.files[0];
@@ -58,14 +58,12 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
         setUploadingDoc(true);
         const formData = new FormData();
         // Use docKey if available (smart selected), otherwise fallback to exact docName or valid key
-        // The backend likely expects specific keys for mapping, but also supports generic names.
-        // If docKey is set, we send that as documentName to ensure it maps to the schema field.
         formData.append('documentName', docKey || docName);
         formData.append('file', file);
 
         try {
-            const userId = agent._id || agent.id;
-            await agentService.uploadDocument(userId, formData);
+            const userId = student._id || student.id;
+            await studentService.uploadDocument(userId, formData);
             toast.success('Document uploaded successfully!');
 
             // Reset form
@@ -88,8 +86,8 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
         if (!deleteConfirm) return;
 
         try {
-            const userId = agent._id || agent.id;
-            await agentService.deleteDocument(userId, deleteConfirm);
+            const userId = student._id || student.id;
+            await studentService.deleteDocument(userId, deleteConfirm);
             toast.success('Document deleted successfully');
             setDeleteConfirm(null);
             if (onUploadSuccess) onUploadSuccess();
@@ -158,12 +156,11 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
                                 value={docName}
                                 onChange={(e) => {
                                     setDocName(e.target.value);
-                                    // If user types manually, clear the smart key to avoid mismatch
-                                    if (docKey && e.target.value !== REQUIRED_AGENT_DOCUMENTS.find(d => d.key === docKey)?.label) {
+                                    if (docKey && e.target.value !== REQUIRED_STUDENT_DOCUMENTS.find(d => d.key === docKey)?.label) {
                                         setDocKey('');
                                     }
                                 }}
-                                placeholder="e.g. ID Proof"
+                                placeholder="e.g. 10th Marksheet"
                                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-semibold focus:outline-none focus:border-blue-500 focus:bg-white transition-all placeholder:font-normal"
                             />
                             {docKey && (
@@ -184,7 +181,7 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
                             type="file"
                             ref={fileInputRef}
                             onChange={handleFileSelect}
-                            accept={docKey === 'agentPhoto' ? ".jpg,.jpeg,.png,.webp,.avif,.heic" : ".pdf,.jpg,.jpeg,.png,.webp"}
+                            accept={docKey === 'photo' ? ".jpg,.jpeg,.png,.webp,.avif,.heic" : ".pdf,.jpg,.jpeg,.png,.webp"}
                             className="w-full text-sm text-gray-500 file:mr-4 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 transition-all cursor-pointer"
                         />
                     </div>
@@ -206,12 +203,12 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {uploadedKeys.length > 0 ? (
                     uploadedKeys.map((key) => {
-                        const url = agent.documents[key];
+                        const url = student.documents[key];
                         if (!url) return null;
 
                         const fullUrl = getFullUrl(url);
-                        const isRequired = REQUIRED_AGENT_DOCUMENTS.some(d => d.key === key);
-                        const label = REQUIRED_AGENT_DOCUMENTS.find(d => d.key === key)?.label || key.replace(/([A-Z])/g, ' $1').trim();
+                        const isRequired = REQUIRED_STUDENT_DOCUMENTS.some(d => d.key === key);
+                        const label = REQUIRED_STUDENT_DOCUMENTS.find(d => d.key === key)?.label || key.replace(/([A-Z])/g, ' $1').trim();
 
                         return (
                             <div key={key} className="group flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-2xl hover:border-blue-200 hover:shadow-sm transition-all">
@@ -277,4 +274,4 @@ const AgentDocumentUpload = ({ agent, onUploadSuccess, isAdmin = false }) => {
     );
 };
 
-export default AgentDocumentUpload;
+export default StudentDocumentUpload;

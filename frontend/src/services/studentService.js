@@ -56,6 +56,30 @@ export const studentService = {
   updatePassportInfo: async (id, data) => {
     return studentService.updateStudent(id, data);
   },
+
+  // Document Management (Parity with Agents)
+  uploadDocument: async (id, formData) => {
+    const response = await apiClient.post(`/students/${id}/documents`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  uploadBulkDocuments: async (id, formData) => {
+    const response = await apiClient.post(`/students/${id}/documents/bulk`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  deleteDocument: async (id, documentName) => {
+    const response = await apiClient.delete(`/students/${id}/documents/${documentName}`);
+    return response.data;
+  },
 };
 
 export default studentService;

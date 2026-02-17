@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
-import { ArrowLeft, Save, ArrowRight, Check } from 'lucide-react';
+import { ArrowLeft, Save, ArrowRight, Check, Loader2 } from 'lucide-react';
 import { useToast } from '../../components/ui/toast';
 import studentService from '../../services/studentService';
+import StudentDocumentUpload from '../../components/students/StudentDocumentUpload';
+import { ROLES, REQUIRED_STUDENT_DOCUMENTS } from '../../utils/constants';
 
 const StudentForm = () => {
   const { id } = useParams();
@@ -13,6 +15,10 @@ const StudentForm = () => {
   const { user } = useSelector((state) => state.auth);
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(isEditMode);
+  const [errors, setErrors] = useState({});
+  const [studentId, setStudentId] = useState(id || null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [studentDataForDocs, setStudentDataForDocs] = useState(null);
 
   const generalRef = useRef(null);
   const educationRef = useRef(null);
@@ -80,7 +86,8 @@ const StudentForm = () => {
       const student = response?.data?.student || response?.data;
 
       if (student) {
-        setFormData({
+        setStudentDataForDocs(student);
+        const fetchedData = {
           firstName: student.firstName || '',
           lastName: student.lastName || '',
           email: student.email || '',
@@ -119,7 +126,8 @@ const StudentForm = () => {
           visa_refusal: student.visaRefusal || student.visa_refusal || '',
           study_permit: student.studyPermit || student.study_permit || '',
           background_details: student.backgroundDetails || student.background_details || '',
-        });
+        };
+        setFormData(fetchedData);
       }
     } catch (err) {
       console.error('Error fetching student:', err);
@@ -131,7 +139,41 @@ const StudentForm = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    setFormData({ ...formData, [name]: value });
+    // Clear error for this field
+    if (errors[name]) {
+      setErrors({ ...errors, [name]: '' });
+    }
+  };
+
+  const validateStep = (step) => {
+    const newErrors = {};
+    if (step === 1) {
+      if (!formData.firstName) newErrors.firstName = 'First name is required';
+      if (!formData.lastName) newErrors.lastName = 'Last name is required';
+      if (!formData.email) {
+        newErrors.email = 'Email is required';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+        newErrors.email = 'Invalid email format';
+      }
+      if (!formData.mobile) {
+        newErrors.mobile = 'Mobile number is required';
+      } else if (!/^\d{10}$/.test(formData.mobile)) {
+        newErrors.mobile = 'Mobile number must be 10 digits';
+      }
+    } else if (step === 2) {
+      if (!formData.education_country) newErrors.education_country = 'Education country is required';
+      if (!formData.highest_level) newErrors.highest_level = 'Highest level is required';
+      if (!formData.grading_scheme) newErrors.grading_scheme = 'Grading scheme is required';
+      if (!formData.grade_average) newErrors.grade_average = 'Grade average/score is required';
+    } else if (step === 4) {
+      if (!formData.visa_refusal) newErrors.visa_refusal = 'Please select visa refusal status';
+      if (!formData.study_permit) newErrors.study_permit = 'Please select study permit status';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const handleSaveStep = async () => {
@@ -141,9 +183,13 @@ const StudentForm = () => {
   };
 
   const handleNext = async () => {
-    await handleSaveStep();
-    if (currentStep < 4) {
-      setCurrentStep(currentStep + 1);
+    if (validateStep(currentStep)) {
+      if (currentStep < 5) {
+        setCurrentStep(currentStep + 1);
+        window.scrollTo(0, 0);
+      }
+    } else {
+      toast.error('Please fix the errors before proceeding');
     }
   };
 
@@ -236,6 +282,7 @@ const StudentForm = () => {
     { number: 2, title: 'Education', ref: educationRef },
     { number: 3, title: 'Test Scores', ref: testScoresRef },
     { number: 4, title: 'Background', ref: backgroundRef },
+    { number: 5, title: 'Documents', ref: null },
   ];
 
   if (loading) {
@@ -357,9 +404,10 @@ const StudentForm = () => {
                     placeholder="Enter mobile number"
                     value={formData.mobile}
                     onChange={handleChange}
-                    className="border border-gray-300 rounded-r-lg p-3 w-full focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                    className={`border rounded-r-lg p-3 w-full focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.mobile ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                   />
                 </div>
+                {errors.mobile && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.mobile}</p>}
               </div>
 
               {/* Referral Detail Display */}
@@ -560,11 +608,12 @@ const StudentForm = () => {
                   name="education_country"
                   value={formData.education_country}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.education_country ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select country</option>
                   {countriesData.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
                 </select>
+                {errors.education_country && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.education_country}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Highest Level of Education</label>
@@ -572,13 +621,14 @@ const StudentForm = () => {
                   name="highest_level"
                   value={formData.highest_level}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.highest_level ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select level</option>
                   <option>Under-Graduate</option>
                   <option>Post-Graduate</option>
                   <option>Diploma</option>
                 </select>
+                {errors.highest_level && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.highest_level}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Grading Scheme</label>
@@ -586,13 +636,14 @@ const StudentForm = () => {
                   name="grading_scheme"
                   value={formData.grading_scheme}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.grading_scheme ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select scheme</option>
                   <option>Percentage</option>
                   <option>CGPA</option>
                   <option>GPA</option>
                 </select>
+                {errors.grading_scheme && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.grading_scheme}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Grade Average/Score</label>
@@ -602,8 +653,9 @@ const StudentForm = () => {
                   placeholder="e.g., 85%, 8.5 CGPA"
                   value={formData.grade_average}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.grade_average ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.grade_average && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.grade_average}</p>}
               </div>
             </div>
           </div>
@@ -709,12 +761,13 @@ const StudentForm = () => {
                   name="visa_refusal"
                   value={formData.visa_refusal}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.visa_refusal ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select</option>
                   <option value="YES">Yes</option>
                   <option value="NO">No</option>
                 </select>
+                {errors.visa_refusal && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.visa_refusal}</p>}
               </div>
               <div>
                 <label className="block font-medium text-gray-700 mb-2">Valid Study Permit?</label>
@@ -722,12 +775,13 @@ const StudentForm = () => {
                   name="study_permit"
                   value={formData.study_permit}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.study_permit ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select</option>
                   <option value="YES">Yes</option>
                   <option value="NO">No</option>
                 </select>
+                {errors.study_permit && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.study_permit}</p>}
               </div>
               <div>
                 <label className="block font-medium text-gray-700 mb-2">Additional Details</label>
@@ -744,44 +798,88 @@ const StudentForm = () => {
           </div>
         )}
 
-        {/* Navigation */}
-        <div className="flex justify-between mt-8 pt-6 border-t">
-          <button
-            onClick={handlePrevious}
-            disabled={currentStep === 1}
-            className={`px-6 py-3 rounded-lg font-medium transition-all ${currentStep === 1
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-              : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
-              }`}
-          >
-            Previous
-          </button>
-          <div className="flex gap-3">
-            <button
-              onClick={handleSaveStep}
-              className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium transition-all flex items-center gap-2"
-            >
-              <Save size={18} />
-              Save Progress
-            </button>
-            {currentStep < 4 ? (
-              <button
-                onClick={handleNext}
-                className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg"
-              >
-                Save & Next <ArrowRight size={18} />
-              </button>
+        {/* Step 5: Document Upload */}
+        {currentStep === 5 && (
+          <div>
+            <div className="mb-6">
+              <h3 className="text-2xl font-semibold text-indigo-700">📂 Document Upload</h3>
+              <p className="text-gray-500 text-sm mt-1 italic font-medium">
+                Upload student documents for verification.
+                {(user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN || user?.role === ROLES.AGENT) && (
+                  <span className="text-indigo-500 block">Note: This step is optional for your role.</span>
+                )}
+              </p>
+            </div>
+
+            {studentDataForDocs ? (
+              <StudentDocumentUpload
+                student={studentDataForDocs}
+                isAdmin={user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN}
+                onUploadSuccess={async () => {
+                  const fresh = await studentService.getStudentById(studentId);
+                  setStudentDataForDocs(fresh?.data?.student || fresh?.data);
+                }}
+              />
             ) : (
-              <button
-                onClick={handleFinalSubmit}
-                className="px-6 py-3 bg-green-600 text-white hover:bg-green-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg"
-              >
-                <Check size={18} />
-                {isEditMode ? 'Update Student' : 'Create Student'}
-              </button>
+              <div className="p-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
+                <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
+                <p className="text-gray-600 font-bold uppercase text-xs tracking-widest">Initializing upload system...</p>
+              </div>
             )}
+
+            <div className="mt-8 pt-8 border-t flex justify-end">
+              <button
+                onClick={() => navigate('/students')}
+                className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:scale-[1.02] active:scale-95"
+              >
+                Finish & Exit
+              </button>
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Navigation */}
+        {currentStep < 5 && (
+          <div className="flex justify-between mt-8 pt-6 border-t">
+            <button
+              onClick={handlePrevious}
+              disabled={currentStep === 1}
+              className={`px-6 py-3 rounded-lg font-medium transition-all ${currentStep === 1
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                : 'bg-gray-300 text-gray-700 hover:bg-gray-400'
+                }`}
+            >
+              Previous
+            </button>
+            <div className="flex gap-3">
+              <button
+                onClick={handleSaveStep}
+                className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium transition-all flex items-center gap-2"
+              >
+                <Save size={18} />
+                Save Progress
+              </button>
+              {currentStep < 4 ? (
+                <button
+                  onClick={handleNext}
+                  className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg"
+                >
+                  Save & Next <ArrowRight size={18} />
+                </button>
+              ) : (
+                <button
+                  onClick={handleFinalSubmit}
+                  className={`px-6 py-3 text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
+                    }`}
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check size={18} />}
+                  {isEditMode ? 'Update Student' : 'Create Student'}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

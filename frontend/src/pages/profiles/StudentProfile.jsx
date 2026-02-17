@@ -162,6 +162,14 @@ const StudentProfile = () => {
         fetchProfile();
     }, []);
 
+    // --- Backend URL Helper ---
+    const getFullUrl = (url) => {
+        if (!url || typeof url !== 'string') return '';
+        if (url.startsWith('http')) return url;
+        const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '');
+        return `${backendUrl}/${url.startsWith('/') ? '' : '/'}${url}`;
+    };
+
     const fetchProfile = async () => {
         try {
             setLoading(true);
@@ -312,8 +320,8 @@ const StudentProfile = () => {
         try {
             setUploading(true);
             const formData = new FormData();
-            formData.append('document', documentForm.selectedFile);
-            formData.append('document_type', documentForm.documentName.trim());
+            formData.append('file', documentForm.selectedFile);
+            formData.append('documentName', documentForm.documentName.trim());
             const response = await apiClient.post('/students/me/documents', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
@@ -334,12 +342,12 @@ const StudentProfile = () => {
     const [deleteId, setDeleteId] = useState(null);
     const [clearExamType, setClearExamType] = useState(null);
 
-    const handleDeleteDocument = (documentId, e) => {
+    const handleDeleteDocument = (documentKey, e) => {
         if (e) {
             e.preventDefault();
             e.stopPropagation();
         }
-        setDeleteId(documentId);
+        setDeleteId(documentKey);
     };
 
     const confirmDelete = async () => {
@@ -359,11 +367,15 @@ const StudentProfile = () => {
 
             console.log("Delete response:", response);
 
-            // Update local state by filtering out the deleted document
-            setStudentData(prev => ({
-                ...prev,
-                documents: prev.documents.filter(doc => doc._id !== documentId)
-            }));
+            // Update local state by removing the key from documents object
+            setStudentData(prev => {
+                const newDocs = { ...prev.documents };
+                delete newDocs[documentId];
+                return {
+                    ...prev,
+                    documents: newDocs
+                };
+            });
 
             setUploadSuccess('Document deleted successfully');
             setDeleteId(null);
@@ -601,7 +613,7 @@ const StudentProfile = () => {
                                                     <DataField label="To (MM/YY)" value={school.toMonthYear} isEditing={editMode.education} onChange={(v) => { const u = [...editData.schoolsAttended]; u[idx].toMonthYear = v; handleFieldChange('schoolsAttended', u); }} mono={true} />
                                                 </div>
                                                 {editMode.education && (
-                                                    <button onClick={() => { const u = [...editData.schoolsAttended]; u.splice(idx, 1); handleFieldChange('schoolsAttended', u); }} className="absolute顶-6 right-8 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-5 h-5" /></button>
+                                                    <button onClick={() => { const u = [...editData.schoolsAttended]; u.splice(idx, 1); handleFieldChange('schoolsAttended', u); }} className="absolute top-6 right-8 p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-5 h-5" /></button>
                                                 )}
                                             </div>
                                         ))}
@@ -735,7 +747,6 @@ const StudentProfile = () => {
                                                     </div>
                                                 )}
                                             </div>
-
                                             {/* GMAT Section */}
                                             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden transition-all duration-300 hover:shadow-md group">
                                                 <div
@@ -992,28 +1003,23 @@ const StudentProfile = () => {
                                 <div className="space-y-3">
                                     <h4 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Uploaded Documents</h4>
                                     <div className="grid grid-cols-1 gap-3">
-                                        {studentData.documents?.length === 0 && (
+                                        {Object.keys(studentData.documents || {}).length === 0 && (
                                             <p className="text-sm text-gray-400 italic">No documents uploaded yet.</p>
                                         )}
-                                        {studentData.documents?.map((doc, idx) => (
+                                        {Object.entries(studentData.documents || {}).map(([key, url], idx) => (
                                             <div key={idx} className="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-xl hover:border-blue-100 transition-all group">
                                                 <div className="flex items-center gap-4 overflow-hidden">
                                                     <div className="p-2 bg-blue-50 text-blue-600 rounded-lg shrink-0">
                                                         <FileText className="w-5 h-5" />
                                                     </div>
                                                     <div className="min-w-0">
-                                                        <h6 className="text-sm font-bold text-gray-900 truncate">{doc.documentName}</h6>
-                                                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">{doc.documentType}</p>
+                                                        <h6 className="text-sm font-bold text-gray-900 truncate">{key.replace(/_/g, ' ')}</h6>
+                                                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">Document</p>
                                                     </div>
                                                 </div>
                                                 <div className="flex items-center gap-3 shrink-0 ml-2">
-                                                    {doc.verified && (
-                                                        <span className="flex items-center gap-1 text-[10px] font-bold text-green-600 bg-green-50 px-2 py-1 rounded-md">
-                                                            <CheckCircle2 className="w-3 h-3" /> VERIFIED
-                                                        </span>
-                                                    )}
                                                     <a
-                                                        href={doc.documentUrl?.startsWith('http') ? doc.documentUrl : `http://localhost:5000${doc.documentUrl?.startsWith('/') ? '' : '/'}${doc.documentUrl}`}
+                                                        href={getFullUrl(url)}
                                                         target="_blank"
                                                         rel="noreferrer"
                                                         className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
@@ -1023,7 +1029,7 @@ const StudentProfile = () => {
                                                     </a>
                                                     <button
                                                         type="button"
-                                                        onClick={(e) => handleDeleteDocument(doc._id, e)}
+                                                        onClick={(e) => handleDeleteDocument(key, e)}
                                                         className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all relative z-50 cursor-pointer border border-transparent hover:border-red-100"
                                                         title="Delete Document"
                                                     >
@@ -1038,87 +1044,91 @@ const StudentProfile = () => {
                         </div>
                     </section>
                 </div >
-            </div >
 
-            {/* Notifications */}
-            {
-                (uploadSuccess || uploadError) && (
-                    <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-right-10 duration-500">
-                        <div className={`px-8 py-5 rounded-2xl shadow-2xl border font-black text-sm uppercase tracking-tight flex items-center gap-4 ${uploadSuccess ? 'bg-black text-white border-black' : 'bg-red-600 text-white border-red-600'}`}>
-                            {uploadSuccess ? <CheckCircle2 className="w-6 h-6 text-green-400" /> : <Lock className="w-6 h-6" />}
-                            {uploadSuccess || uploadError}
-                        </div>
-                    </div>
-                )
-            }
-
-            {/* Delete Confirmation Modal */}
-            {deleteId && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
-                        <div className="flex flex-col items-center text-center space-y-4">
-                            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-                                <Trash2 className="w-6 h-6 text-red-600" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-bold text-gray-900">Delete Document?</h3>
-                                <p className="text-sm text-gray-500">
-                                    Are you sure you want to delete this document? This action cannot be undone.
-                                </p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 w-full pt-2">
-                                <button
-                                    onClick={() => setDeleteId(null)}
-                                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmDelete}
-                                    className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
-                                >
-                                    Delete
-                                </button>
+                {/* Notifications */}
+                {
+                    (uploadSuccess || uploadError) && (
+                        <div className="fixed bottom-10 right-10 z-[100] animate-in slide-in-from-right-10 duration-500">
+                            <div className={`px-8 py-5 rounded-2xl shadow-2xl border font-black text-sm uppercase tracking-tight flex items-center gap-4 ${uploadSuccess ? 'bg-black text-white border-black' : 'bg-red-600 text-white border-red-600'}`}>
+                                {uploadSuccess ? <CheckCircle2 className="w-6 h-6 text-green-400" /> : <Lock className="w-6 h-6" />}
+                                {uploadSuccess || uploadError}
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    )
+                }
 
-            {/* Clear Exam Confirmation Modal */}
-            {clearExamType && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
-                        <div className="flex flex-col items-center text-center space-y-4">
-                            <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
-                                <Trash2 className="w-6 h-6 text-red-600" />
-                            </div>
-                            <div className="space-y-2">
-                                <h3 className="text-lg font-bold text-gray-900">Clear Record?</h3>
-                                <p className="text-sm text-gray-500">
-                                    Are you sure you want to clear this {clearExamType.toUpperCase()} record? This action cannot be undone.
-                                </p>
-                            </div>
-                            <div className="grid grid-cols-2 gap-3 w-full pt-2">
-                                <button
-                                    onClick={() => setClearExamType(null)}
-                                    className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={confirmClearExam}
-                                    className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
-                                >
-                                    Clear Record
-                                </button>
+                {/* Delete Confirmation Modal */}
+                {
+                    deleteId && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
+                                <div className="flex flex-col items-center text-center space-y-4">
+                                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                                        <Trash2 className="w-6 h-6 text-red-600" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-bold text-gray-900">Delete Document?</h3>
+                                        <p className="text-sm text-gray-500">
+                                            Are you sure you want to delete this document? This action cannot be undone.
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                                        <button
+                                            onClick={() => setDeleteId(null)}
+                                            className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmDelete}
+                                            className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
+                                        >
+                                            Delete
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    )
+                }
 
-        </div >
+                {/* Clear Exam Confirmation Modal */}
+                {
+                    clearExamType && (
+                        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in zoom-in-95 duration-200">
+                            <div className="bg-white rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl border border-gray-100">
+                                <div className="flex flex-col items-center text-center space-y-4">
+                                    <div className="w-12 h-12 rounded-full bg-red-50 flex items-center justify-center">
+                                        <Trash2 className="w-6 h-6 text-red-600" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <h3 className="text-lg font-bold text-gray-900">Clear Record?</h3>
+                                        <p className="text-sm text-gray-500">
+                                            Are you sure you want to clear this {clearExamType.toUpperCase()} record? This action cannot be undone.
+                                        </p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3 w-full pt-2">
+                                        <button
+                                            onClick={() => setClearExamType(null)}
+                                            className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            onClick={confirmClearExam}
+                                            className="px-4 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 shadow-lg shadow-red-200 transition-all transform active:scale-95"
+                                        >
+                                            Clear Record
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )
+                }
+
+            </div>
+        </div>
     );
 };
 

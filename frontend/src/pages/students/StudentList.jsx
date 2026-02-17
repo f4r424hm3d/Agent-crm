@@ -149,7 +149,7 @@ const StudentList = () => {
                     <p className="text-gray-600">Manage and monitor all registered students</p>
                 </div>
                 <button
-                    className="bg-indigo-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg"
+                    className="bg-indigo-600 text-white rounded-lg px-6 py-3 font-medium hover:bg-indigo-700 transition-all flex items-center gap-2 shadow-lg cursor-pointer"
                     onClick={() => setShowAddModal(true)}
                 >
                     <Plus size={20} />
@@ -226,14 +226,14 @@ const StudentList = () => {
                     <div className="md:col-span-12 flex justify-end gap-3 mt-6">
                         <button
                             onClick={handleApplyFilters}
-                            className="px-8 py-3 bg-indigo-600 text-white rounded-full font-bold hover:bg-indigo-700 transition-all text-sm shadow-md flex items-center gap-2"
+                            className="px-8 py-3 bg-indigo-600 text-white rounded-full font-bold hover:bg-indigo-700 transition-all text-sm shadow-md flex items-center gap-2 cursor-pointer"
                         >
                             <Search size={18} />
                             Apply filter
                         </button>
                         <button
                             onClick={clearFilters}
-                            className="px-8 py-3 border-2 border-indigo-600 text-indigo-600 rounded-full font-bold hover:bg-indigo-50 transition-all text-sm"
+                            className="px-8 py-3 border-2 border-indigo-600 text-indigo-600 rounded-full font-bold hover:bg-indigo-50 transition-all text-sm cursor-pointer"
                         >
                             Clear filter
                         </button>
@@ -273,7 +273,7 @@ const StudentList = () => {
                         </AlertDialogAction>
                         <AlertDialogAction
                             onClick={handleCreateManually}
-                            className="bg-green-600 hover:bg-green-700"
+                            className="bg-green-600 hover:bg-green-700 cursor-pointer"
                         >
                             Create Manually
                         </AlertDialogAction>
@@ -330,7 +330,7 @@ const StudentList = () => {
                     <p className="text-red-700 font-medium">Error: {error}</p>
                     <button
                         onClick={fetchStudentsData}
-                        className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                        className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 cursor-pointer"
                     >
                         Retry
                     </button>
@@ -348,7 +348,7 @@ const StudentList = () => {
                     {!searchTerm && (
                         <button
                             onClick={() => setShowAddModal(true)}
-                            className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700"
+                            className="bg-indigo-600 text-white px-6 py-3 rounded-lg hover:bg-indigo-700 cursor-pointer"
                         >
                             Add First Student
                         </button>
@@ -433,7 +433,7 @@ const StudentList = () => {
                                                                 e.stopPropagation();
                                                                 navigate(`/pending-applications?studentId=${student._id}`);
                                                             }}
-                                                            className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all"
+                                                            className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-600 hover:text-white transition-all cursor-pointer"
                                                             title="Add Another Application"
                                                         >
                                                             <PlusCircle size={16} />
@@ -445,7 +445,7 @@ const StudentList = () => {
                                                             e.stopPropagation();
                                                             navigate(`/pending-applications?studentId=${student._id}`);
                                                         }}
-                                                        className="px-4 py-2.5 bg-white text-indigo-600 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:bg-indigo-50 transition-all flex items-center gap-2 text-sm font-semibold"
+                                                        className="px-4 py-2.5 bg-white text-indigo-600 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:bg-indigo-50 transition-all flex items-center gap-2 text-sm font-semibold cursor-pointer"
                                                         title="Apply for Program"
                                                     >
                                                         <PlusCircle size={16} />
@@ -510,10 +510,10 @@ const StudentList = () => {
                         Showing <strong className="text-gray-800 font-semibold">{filteredStudents.length}</strong> of <strong className="text-gray-800 font-semibold">{students.length}</strong> students
                     </div>
                     <div className="flex gap-2">
-                        <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">
                             Previous
                         </button>
-                        <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors">
+                        <button className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer">
                             Next
                         </button>
                     </div>

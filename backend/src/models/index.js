@@ -42,5 +42,8 @@ module.exports = {
   BrochureType,
   BrochureCategory,
   UniversityProgram,
-  AgentUniversityAssignment
+  AgentUniversityAssignment,
+  Commission,
+  CommissionRule,
+  Payout
 };
