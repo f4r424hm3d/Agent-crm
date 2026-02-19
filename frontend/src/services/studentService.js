@@ -80,6 +80,12 @@ export const studentService = {
     const response = await apiClient.delete(`/students/${id}/documents/${documentName}`);
     return response.data;
   },
+
+  // Get all countries
+  getCountries: async () => {
+    const response = await apiClient.get('/countries');
+    return response.data;
+  },
 };
 
 export default studentService;

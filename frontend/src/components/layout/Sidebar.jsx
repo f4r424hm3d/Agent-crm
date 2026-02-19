@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { useSelector, useDispatch } from "react-redux";
+import { selectSettings } from "../../store/slices/settingsSlice";
 import {
   FiHome,
   FiUsers,
@@ -41,10 +42,13 @@ const styles = {
 
 const Sidebar = ({ isOpen, onClose }) => {
   const { user } = useSelector((state) => state.auth);
+  const settings = useSelector(selectSettings);
+  const logoLight = settings?.logo_light;
   const dispatch = useDispatch();
   const location = useLocation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState({});
+  const [logoError, setLogoError] = useState(false);
 
   useEffect(() => {
     const activeDropdowns = {};
@@ -233,14 +237,23 @@ const Sidebar = ({ isOpen, onClose }) => {
       >
         {/* Logo */}
         <div className="h-20 flex items-center px-8 border-b border-primary-500/50 shrink-0">
-          <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/10">
-              <span className="text-primary-600 font-black text-xl">U</span>
+          {logoLight && !logoError ? (
+            <img
+              src={logoLight}
+              alt="Logo"
+              className="max-h-12 w-auto object-contain"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <div className="flex items-center space-x-3">
+              <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center shadow-lg shadow-black/10">
+                <span className="text-primary-600 font-black text-xl">U</span>
+              </div>
+              <h1 style={styles["#custom-h1-class"]} className="text-xl font-black tracking-tight text-white uppercase">
+                UniAdmit
+              </h1>
             </div>
-            <h1 style={styles["#custom-h1-class"]} className="text-xl font-black tracking-tight text-white uppercase">
-              UniAdmit
-            </h1>
-          </div>
+          )}
         </div>
 
         {/* Navigation - Fixed height with scroll */}

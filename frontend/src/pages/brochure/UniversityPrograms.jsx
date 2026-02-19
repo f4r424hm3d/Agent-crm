@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { brochureService } from '../../services/brochureService';
 import { FiEdit2, FiPlus, FiSearch, FiTrash2, FiCheck, FiX, FiUsers } from 'react-icons/fi';
+import PageHeader from '../../components/layout/PageHeader';
 import { useToast } from '../../components/ui/toast';
 import apiClient from '../../services/apiClient';
 import AgentAssignmentModal from './components/AgentAssignmentModal';
@@ -334,6 +335,12 @@ const UniversityPrograms = () => {
     return (
         <div className="p-6">
             {/* Header */}
+            <PageHeader
+                breadcrumbs={[
+                    { label: 'Dashboard', link: '/dashboard' },
+                    { label: 'University Programs' }
+                ]}
+            />
             <div className="mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">University and Program</h1>
                 {typeIdFromUrl && (

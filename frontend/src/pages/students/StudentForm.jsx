@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { ArrowLeft, Save, ArrowRight, Check, Loader2 } from 'lucide-react';
+import PageHeader from '../../components/layout/PageHeader';
+import SearchableSelect from '../../components/ui/SearchableSelect';
 import { useToast } from '../../components/ui/toast';
 import studentService from '../../services/studentService';
 import StudentDocumentUpload from '../../components/students/StudentDocumentUpload';
@@ -19,6 +21,8 @@ const StudentForm = () => {
   const [studentId, setStudentId] = useState(id || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [studentDataForDocs, setStudentDataForDocs] = useState(null);
+  const [countriesData, setCountriesData] = useState([]);
+  const [phoneCode, setPhoneCode] = useState([]);
 
   const generalRef = useRef(null);
   const educationRef = useRef(null);
@@ -69,19 +73,48 @@ const StudentForm = () => {
 
   // Fetch data if in edit mode
   useEffect(() => {
-    if (isEditMode) {
-      fetchStudentData();
-    } else if (user) {
-      setFormData(prev => ({
-        ...prev,
-        referredBy: user.id || user._id || user.email || 'SELF'
-      }));
-    }
+    const initData = async () => {
+      try {
+        setLoading(true);
+        // Fetch countries first
+        const countriesResponse = await studentService.getCountries();
+        const countries = countriesResponse?.data || [];
+
+        // Transform for dropdowns
+        const formattedCountries = countries.map(c => ({
+          code: c.code,
+          name: c.name
+        }));
+
+        const formattedPhoneCodes = countries.flatMap(c =>
+          c.phone?.map(p => ({ phonecode: p.toString() })) || []
+        ).filter((v, i, a) => a.findIndex(t => t.phonecode === v.phonecode) === i); // Unique
+
+        setCountriesData(formattedCountries);
+        setPhoneCode(formattedPhoneCodes);
+
+        if (isEditMode) {
+          await fetchStudentData();
+        } else if (user) {
+          setFormData(prev => ({
+            ...prev,
+            referredBy: user.id || user._id || user.email || 'SELF'
+          }));
+        }
+      } catch (err) {
+        console.error('Error initializing form:', err);
+        toast.error('Failed to load initial data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initData();
   }, [id, user]);
 
   const fetchStudentData = async () => {
     try {
-      setLoading(true);
+      // setLoading(true); // Handled in initData
       const response = await studentService.getStudentById(id);
       const student = response?.data?.student || response?.data;
 
@@ -134,7 +167,7 @@ const StudentForm = () => {
       toast.error('Failed to load student data');
       navigate('/students');
     } finally {
-      setLoading(false);
+      // setLoading(false); // Handled in initData
     }
   };
 
@@ -199,7 +232,14 @@ const StudentForm = () => {
     }
   };
 
-  const handleFinalSubmit = async () => {
+  const handleFinalSubmit = async (shouldNavigate = true) => {
+    // For step 4 to 5 transition, we must validate step 4
+    if (!shouldNavigate && !validateStep(4)) {
+      toast.error('Please fix the errors before proceeding');
+      return;
+    }
+
+    setIsSubmitting(true);
     try {
       // Map frontend fields to backend expected fields
       const submissionData = {
@@ -243,39 +283,39 @@ const StudentForm = () => {
         backgroundDetails: formData.background_details,
       };
 
+      let response;
       if (isEditMode) {
-        await studentService.updateStudent(id, submissionData);
-        toast.success('Student updated successfully!');
+        response = await studentService.updateStudent(id, submissionData);
       } else {
-        await studentService.createStudent(submissionData);
-        toast.success('Student created successfully!');
+        response = await studentService.createStudent(submissionData);
+        const newId = response?.data?.student?._id || response?.data?.student?.id || response?.data?._id || response?.data?.id;
+        if (newId) {
+          setStudentId(newId);
+          // Fetch fresh data for Step 5 Document Upload
+          const fresh = await studentService.getStudentById(newId);
+          setStudentDataForDocs(fresh?.data?.student || fresh?.data);
+        }
       }
 
-      setTimeout(() => {
-        navigate('/students');
-      }, 1500);
+      if (shouldNavigate) {
+        toast.success(`Student ${isEditMode ? 'updated' : 'created'} successfully!`);
+        setTimeout(() => {
+          navigate('/students');
+        }, 1500);
+      } else {
+        toast.success('Basic information saved. Proceed to document upload.');
+        setCurrentStep(5);
+        window.scrollTo(0, 0);
+      }
     } catch (err) {
       console.error('Submission error:', err);
       toast.error(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} student`);
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
-  // Static data (same as CreateStudent)
-  const countriesData = [
-    { code: 'IN', name: 'INDIA' },
-    { code: 'US', name: 'UNITED STATES' },
-    { code: 'GB', name: 'UNITED KINGDOM' },
-    { code: 'CA', name: 'CANADA' },
-    { code: 'AU', name: 'AUSTRALIA' },
-  ];
-
-  const phoneCode = [
-    { phonecode: '1' },
-    { phonecode: '7' },
-    { phonecode: '44' },
-    { phonecode: '61' },
-    { phonecode: '91' },
-  ];
+  // Removed static countriesData and phoneCode arrays as they are now state variables
 
   const steps = [
     { number: 1, title: 'Personal Info', ref: generalRef },
@@ -294,46 +334,44 @@ const StudentForm = () => {
   }
 
   return (
-    <div className="p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
+    <div className="p-4 md:p-8 bg-gradient-to-br from-gray-50 to-gray-100 min-h-screen">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/students')}
-            className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
-          >
-            <ArrowLeft size={24} className="text-gray-700" />
-          </button>
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              {isEditMode ? 'Edit Student Details' : 'Create New Student'}
-            </h1>
-            <p className="text-gray-600 text-sm mt-1 font-medium italic">Step {currentStep} of 4 - {steps[currentStep - 1].title}</p>
-          </div>
-        </div>
+      <PageHeader
+        breadcrumbs={[
+          { label: 'Dashboard', link: '/dashboard' },
+          { label: 'Students', link: '/students' },
+          { label: isEditMode ? 'Edit Student' : 'Create Student' }
+        ]}
+      />
+
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">
+          {isEditMode ? 'Edit Student Details' : 'Create New Student'}
+        </h1>
+        <p className="text-gray-600 text-sm mt-1 font-medium italic">Step {currentStep} of 5 - {steps[currentStep - 1].title}</p>
       </div>
 
       {/* Progress Steps */}
-      <div className="bg-white rounded-2xl shadow-lg p-6 mb-6">
-        <div className="flex items-center justify-between">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-6 mb-6 overflow-x-auto">
+        <div className="flex items-center justify-between min-w-[300px] md:min-w-0">
           {steps.map((step, index) => (
             <React.Fragment key={step.number}>
-              <div className="flex flex-col items-center">
-                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep > step.number
+              <div className="flex flex-col items-center min-w-[80px]">
+                <div className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-semibold transition-all ${currentStep > step.number
                   ? 'bg-green-500 text-white'
                   : currentStep === step.number
-                    ? 'bg-indigo-600 text-white ring-4 ring-indigo-200'
+                    ? 'bg-indigo-600 text-white ring-2 md:ring-4 ring-indigo-200'
                     : 'bg-gray-200 text-gray-500'
                   }`}>
-                  {currentStep > step.number ? <Check size={20} /> : step.number}
+                  {currentStep > step.number ? <Check size={16} /> : step.number}
                 </div>
-                <span className={`text-sm mt-2 font-medium ${currentStep === step.number ? 'text-indigo-600' : 'text-gray-500'
+                <span className={`text-xs md:text-sm mt-2 font-medium text-center ${currentStep === step.number ? 'text-indigo-600' : 'text-gray-500'
                   }`}>
                   {step.title}
                 </span>
               </div>
               {index < steps.length - 1 && (
-                <div className={`flex-1 h-1 mx-4 rounded transition-all ${currentStep > step.number ? 'bg-green-500' : 'bg-gray-200'
+                <div className={`hidden md:block flex-1 h-1 mx-2 md:mx-4 rounded transition-all ${currentStep > step.number ? 'bg-green-500' : 'bg-gray-200'
                   }`} />
               )}
             </React.Fragment>
@@ -342,7 +380,7 @@ const StudentForm = () => {
       </div>
 
       {/* Form Content */}
-      <div className="bg-white rounded-2xl shadow-lg p-8">
+      <div className="bg-white rounded-2xl shadow-lg p-4 md:p-8">
         {/* Step 1: Personal Information */}
         {currentStep === 1 && (
           <div ref={generalRef}>
@@ -360,8 +398,9 @@ const StudentForm = () => {
                   placeholder="Enter first name"
                   value={formData.firstName}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.firstName ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.firstName && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.firstName}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Last Name <span className="text-red-500">*</span></label>
@@ -371,8 +410,9 @@ const StudentForm = () => {
                   placeholder="Enter last name"
                   value={formData.lastName}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.lastName ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.lastName && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.lastName}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Email Address <span className="text-red-500">*</span></label>
@@ -382,36 +422,36 @@ const StudentForm = () => {
                   placeholder="student@example.com"
                   value={formData.email}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.email ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.email && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.email}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Mobile Number <span className="text-red-500">*</span></label>
-                <div className="flex">
-                  <select
-                    name="c_code"
-                    value={formData.c_code}
-                    onChange={handleChange}
-                    className="border border-gray-300 rounded-l-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                  >
-                    {phoneCode.map((code, idx) => (
-                      <option key={idx} value={code.phonecode}>+{code.phonecode}</option>
-                    ))}
-                  </select>
+                <div className="flex gap-2">
+                  <div className="w-[110px] md:w-[140px]">
+                    <SearchableSelect
+                      options={phoneCode.map(c => ({ label: `+${c.phonecode}`, value: c.phonecode }))}
+                      value={formData.c_code}
+                      onChange={(val) => handleChange({ target: { name: 'c_code', value: val } })}
+                      placeholder="+91"
+                      searchPlaceholder="Search code..."
+                    />
+                  </div>
                   <input
                     type="text"
                     name="mobile"
                     placeholder="Enter mobile number"
                     value={formData.mobile}
                     onChange={handleChange}
-                    className={`border rounded-r-lg p-3 w-full focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.mobile ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                    className={`border rounded-lg p-3 w-full focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.mobile ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                   />
                 </div>
                 {errors.mobile && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.mobile}</p>}
               </div>
 
               {/* Referral Detail Display */}
-              <div className="col-span-1 md:col-span-2 bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm">
+              <div className="hidden md:block col-span-1 md:col-span-2 bg-indigo-50 border-2 border-indigo-200 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div>
                     <label className="text-[10px] font-bold text-indigo-500 uppercase tracking-widest block mb-2">Referral Tracking</label>
@@ -472,15 +512,12 @@ const StudentForm = () => {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Country of Citizenship</label>
-                <select
-                  name="nationality"
+                <SearchableSelect
+                  options={countriesData.map(c => ({ label: c.name, value: c.name }))}
                   value={formData.nationality}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                >
-                  <option value="">Select country</option>
-                  {countriesData.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
-                </select>
+                  onChange={(val) => handleChange({ target: { name: 'nationality', value: val } })}
+                  placeholder="Select country"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Passport Number</label>
@@ -569,15 +606,12 @@ const StudentForm = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Country</label>
-                  <select
-                    name="country"
+                  <SearchableSelect
+                    options={countriesData.map(c => ({ label: c.name, value: c.name }))}
                     value={formData.country}
-                    onChange={handleChange}
-                    className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                  >
-                    <option value="">Select country</option>
-                    {countriesData.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
-                  </select>
+                    onChange={(val) => handleChange({ target: { name: 'country', value: val } })}
+                    placeholder="Select country"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Postal/Zip Code</label>
@@ -604,15 +638,13 @@ const StudentForm = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Country of Education</label>
-                <select
-                  name="education_country"
+                <SearchableSelect
+                  options={countriesData.map(c => ({ label: c.name, value: c.name }))}
                   value={formData.education_country}
-                  onChange={handleChange}
-                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.education_country ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
-                >
-                  <option value="">Select country</option>
-                  {countriesData.map(c => <option key={c.code} value={c.name}>{c.name}</option>)}
-                </select>
+                  onChange={(val) => handleChange({ target: { name: 'education_country', value: val } })}
+                  placeholder="Select country"
+                  className={errors.education_country ? 'border-red-500 rounded-lg' : ''}
+                />
                 {errors.education_country && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.education_country}</p>}
               </div>
               <div>
@@ -829,7 +861,7 @@ const StudentForm = () => {
 
             <div className="mt-8 pt-8 border-t flex justify-end">
               <button
-                onClick={() => navigate('/students')}
+                onClick={() => handleFinalSubmit(true)}
                 className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:scale-[1.02] active:scale-95"
               >
                 Finish & Exit
@@ -840,7 +872,7 @@ const StudentForm = () => {
 
         {/* Navigation */}
         {currentStep < 5 && (
-          <div className="flex justify-between mt-8 pt-6 border-t">
+          <div className="flex flex-col-reverse md:flex-row justify-between gap-4 mt-8 pt-6 border-t">
             <button
               onClick={handlePrevious}
               disabled={currentStep === 1}
@@ -851,7 +883,7 @@ const StudentForm = () => {
             >
               Previous
             </button>
-            <div className="flex gap-3">
+            <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
               <button
                 onClick={handleSaveStep}
                 className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium transition-all flex items-center gap-2"
@@ -859,16 +891,17 @@ const StudentForm = () => {
                 <Save size={18} />
                 Save Progress
               </button>
-              {currentStep < 4 ? (
+              {currentStep < 5 ? (
                 <button
-                  onClick={handleNext}
+                  onClick={currentStep === 4 ? () => handleFinalSubmit(false) : handleNext}
                   className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg"
                 >
-                  Save & Next <ArrowRight size={18} />
+                  {currentStep === 4 ? (isSubmitting ? 'Saving...' : 'Save & Next') : 'Save & Next'}
+                  {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight size={18} />}
                 </button>
               ) : (
                 <button
-                  onClick={handleFinalSubmit}
+                  onClick={() => handleFinalSubmit(true)}
                   className={`px-6 py-3 text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
                     }`}
                   disabled={isSubmitting}

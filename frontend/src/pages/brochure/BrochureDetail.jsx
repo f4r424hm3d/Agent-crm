@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { brochureService } from '../../services/brochureService';
 import { FiTrash2, FiSearch, FiExternalLink, FiFileText, FiCopy, FiDownload, FiEdit3, FiX } from 'react-icons/fi';
+import PageHeader from '../../components/layout/PageHeader';
 import { useToast } from '../../components/ui/toast';
 import {
     AlertDialog,
@@ -295,17 +296,14 @@ const BrochureDetail = () => {
     return (
         <div className="p-6">
             {/* Header with Breadcrumb */}
+            <PageHeader
+                breadcrumbs={[
+                    { label: 'Dashboard', link: '/dashboard' },
+                    { label: 'University Programs', link: '/brochure/university-programs' },
+                    { label: upDetails?.name || 'Loading...' }
+                ]}
+            />
             <div className="mb-6">
-                <div className="flex items-center text-sm text-gray-600 mb-2">
-                    <button
-                        onClick={() => navigate('/brochure/university-programs')}
-                        className="hover:text-blue-600"
-                    >
-                        University and Program
-                    </button>
-                    <span className="mx-2">/</span>
-                    <span className="text-gray-900 font-medium">{upDetails?.name || 'Loading...'}</span>
-                </div>
                 <h1 className="text-2xl font-bold text-gray-800">Upload Brochure</h1>
                 {upDetails && (
                     <p className="text-sm text-gray-600 mt-1">
