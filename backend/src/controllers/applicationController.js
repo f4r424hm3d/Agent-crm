@@ -27,7 +27,7 @@ class ApplicationController {
         {
           $match: {
             ...matchQuery,
-            ...(req.userRole !== 'AGENT' ? { isCompleted: true } : {})
+            isCompleted: true
           }
         },
         {

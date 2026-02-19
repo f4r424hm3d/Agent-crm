@@ -62,13 +62,12 @@ const PublicStudentRegistration = () => {
         speaking_score: '',
         overall_score: '',
         // Step 4: Background
+        documents: [], // Array to store { documentType, documentUrl, documentName }
+        identity_type: 'Aadhaar', // Default value
+        identity_number: '',       // Initialize to empty string
         visa_refusal: '',
         study_permit: '',
-        background_details: '',
-        // Step 5: Documents & ID Proof
-        identity_type: '',
-        identity_number: '',
-        documents: [], // Array to store { documentType, documentUrl, documentName }
+        background_details: ''
     });
 
     // On component mount: Check for draft or referral
