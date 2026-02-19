@@ -19,9 +19,10 @@ const storage = multer.diskStorage({
                 return cb(new Error('Student draft not found'), null);
             }
 
-            // Folder: FirstName_LastName_TempId (Stable)
+            // Folder: FirstName_LastName_Email (Unified structure)
             const safeName = `${student.firstName}_${student.lastName}`.replace(/[^a-zA-Z0-9]/g, '_');
-            const folderName = `${safeName}_${student.tempStudentId}`;
+            const safeEmail = student.email.replace(/[^a-zA-Z0-9]/g, '_'); // Basic sanitization for FS
+            const folderName = `${safeName}_${safeEmail}`;
 
             const baseUploadPath = 'uploads/documents/students';
             const fullPath = path.join(process.cwd(), baseUploadPath, folderName);
@@ -70,12 +71,18 @@ const upload = multer({
 exports.uploadDocument = (req, res) => {
     upload(req, res, async function (err) {
         if (err instanceof multer.MulterError) {
+            console.error('Multer Error:', err);
             return res.status(400).json({ success: false, message: err.message });
         } else if (err) {
+            console.error('Unknown Upload Error:', err);
             return res.status(400).json({ success: false, message: err.message });
         }
 
         try {
+            console.log('Upload Request Body:', req.body);
+            console.log('Upload Request File:', req.file);
+            console.log('Upload Request Params:', req.params);
+
             if (!req.file) {
                 return res.status(400).json({ success: false, message: 'No file uploaded' });
             }
@@ -85,41 +92,37 @@ exports.uploadDocument = (req, res) => {
 
             const student = await Student.findOne({ tempStudentId: tempId, isDraft: true });
             if (!student) {
+                console.error('Draft not found for tempId:', tempId);
                 return res.status(404).json({ success: false, message: 'Draft not found' });
             }
 
             // Construct relative URL for frontend
-            // Path stored: uploads/documents/students/Folder/File
-            // URL should differ based on how static files are served.
-            // Assuming 'uploads' is served statically.
             const relativePath = req.file.path.replace(process.cwd(), '').replace(/\\/g, '/');
-            // Ensure leading slash
             const fileUrl = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
 
             const newDocument = {
                 documentType,
-                documentName: documentName || file.originalname,
+                documentName: documentName || req.file.originalname,
                 documentUrl: fileUrl,
                 verified: false
             };
 
-            // Check if document of this type already exists, replace it?
-            // Requirements: "Option to replace uploaded file"
-            // If it's a unique type like 'passport' or 'photo', replace.
-            // If 'degree', might allow multiple (handled by frontend calling this multiple times with different types/names?)
+            console.log('New Document Object:', newDocument);
+            console.log('Current Documents (before):', student.documents);
 
-            // For now, let's just push to array. Frontend logic can handle display/replacement UI.
-            // Backend just specifically needs to know if we overwrite or append.
-            // Let's filter out existing doc of same type if it's a single-file type.
-
-            const singleFileTypes = ['photo', 'id_proof', 'resume', 'marksheet_10', 'marksheet_12'];
-
-            if (singleFileTypes.includes(documentType)) {
-                student.documents = student.documents.filter(doc => doc.documentType !== documentType);
+            // Store in Map
+            if (!student.documents || !(student.documents instanceof Map)) {
+                console.log('Initializing new Map for documents');
+                student.documents = new Map();
             }
 
-            student.documents.push(newDocument);
+            // Log before setting
+            console.log(`Setting document type: ${documentType}`);
+            student.documents.set(documentType, newDocument);
+
+            student.markModified('documents');
             await student.save();
+            console.log('Student saved successfully');
 
             res.status(200).json({
                 success: true,

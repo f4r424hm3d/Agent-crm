@@ -86,6 +86,42 @@ export const studentService = {
     const response = await apiClient.get('/countries');
     return response.data;
   },
+
+  // Public Student Registration (Draft Flow)
+  saveDraftStep1: async (data) => {
+    const response = await apiClient.post('/students/draft/step1', data);
+    return response.data;
+  },
+
+  updateDraftStep: async (tempId, step, data) => {
+    const response = await apiClient.put(`/students/draft/${tempId}/step/${step}`, data);
+    return response.data;
+  },
+
+  completeRegistration: async (tempId, data) => {
+    const response = await apiClient.post(`/students/draft/${tempId}/complete`, data);
+    return response.data;
+  },
+
+  getDraft: async (tempId) => {
+    const response = await apiClient.get(`/students/draft/${tempId}`);
+    return response.data;
+  },
+
+  validateReferral: async (referralCode) => {
+    const response = await apiClient.get(`/validate-referral?ref=${referralCode}`);
+    return response.data;
+  },
+
+  // Draft Document Upload
+  uploadDraftDocument: async (tempId, formData) => {
+    const response = await apiClient.post(`/students/draft/${tempId}/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
 };
 
 export default studentService;

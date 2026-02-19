@@ -9,20 +9,34 @@ import studentService from '../../services/studentService';
 import StudentDocumentUpload from '../../components/students/StudentDocumentUpload';
 import { ROLES, REQUIRED_STUDENT_DOCUMENTS } from '../../utils/constants';
 
+import useCountries from '../../hooks/useCountries';
+import {
+  validateRequired,
+  validateEmail,
+  validateMobile,
+  validateDate,
+  validateNumber
+} from '../../utils/validation';
+
 const StudentForm = () => {
   const { id } = useParams();
   const isEditMode = !!id;
   const navigate = useNavigate();
   const toast = useToast();
   const { user } = useSelector((state) => state.auth);
+
+  // Use custom hook for countries and phone codes
+  const { countries: countriesData, phoneCodes: phoneCode, loading: countriesLoading } = useCountries();
+
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(isEditMode);
   const [errors, setErrors] = useState({});
   const [studentId, setStudentId] = useState(id || null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [studentDataForDocs, setStudentDataForDocs] = useState(null);
-  const [countriesData, setCountriesData] = useState([]);
-  const [phoneCode, setPhoneCode] = useState([]);
+
+  // State for manual document upload (before student creation)
+  const [pendingDocs, setPendingDocs] = useState([]);
 
   const generalRef = useRef(null);
   const educationRef = useRef(null);
@@ -35,7 +49,7 @@ const StudentForm = () => {
     lastName: '',
     email: '',
     mobile: '',
-    c_code: '91',
+    c_code: '',
     father: '',
     mother: '',
     dob: '',
@@ -43,8 +57,8 @@ const StudentForm = () => {
     nationality: '',
     passport_number: '',
     passport_expiry: '',
-    marital_status: 'Single',
-    gender: 'Male',
+    marital_status: '',
+    gender: '',
     home_address: '',
     city: '',
     state: '',
@@ -75,42 +89,27 @@ const StudentForm = () => {
   useEffect(() => {
     const initData = async () => {
       try {
-        setLoading(true);
-        // Fetch countries first
-        const countriesResponse = await studentService.getCountries();
-        const countries = countriesResponse?.data || [];
-
-        // Transform for dropdowns
-        const formattedCountries = countries.map(c => ({
-          code: c.code,
-          name: c.name
-        }));
-
-        const formattedPhoneCodes = countries.flatMap(c =>
-          c.phone?.map(p => ({ phonecode: p.toString() })) || []
-        ).filter((v, i, a) => a.findIndex(t => t.phonecode === v.phonecode) === i); // Unique
-
-        setCountriesData(formattedCountries);
-        setPhoneCode(formattedPhoneCodes);
-
         if (isEditMode) {
+          setLoading(true);
           await fetchStudentData();
         } else if (user) {
           setFormData(prev => ({
             ...prev,
             referredBy: user.id || user._id || user.email || 'SELF'
           }));
+          setLoading(false);
+        } else {
+          setLoading(false);
         }
       } catch (err) {
         console.error('Error initializing form:', err);
         toast.error('Failed to load initial data');
-      } finally {
         setLoading(false);
       }
     };
 
     initData();
-  }, [id, user]);
+  }, [id, user, isEditMode]);
 
   const fetchStudentData = async () => {
     try {
@@ -125,7 +124,7 @@ const StudentForm = () => {
           lastName: student.lastName || '',
           email: student.email || '',
           mobile: student.phone || student.mobile || '',
-          c_code: student.countryCode || student.c_code || '91',
+          c_code: student.countryCode || student.c_code || '',
           father: student.fatherName || student.father || '',
           mother: student.motherName || student.mother || '',
           dob: student.dateOfBirth ? student.dateOfBirth.split('T')[0] : (student.dob ? student.dob.split('T')[0] : ''),
@@ -133,8 +132,8 @@ const StudentForm = () => {
           nationality: student.nationality || '',
           passport_number: student.passportNumber || student.passport_number || '',
           passport_expiry: student.passportExpiry ? student.passportExpiry.split('T')[0] : (student.passport_expiry ? student.passport_expiry.split('T')[0] : ''),
-          marital_status: student.maritalStatus || student.marital_status || 'Single',
-          gender: student.gender || 'Male',
+          marital_status: student.maritalStatus || student.marital_status || '',
+          gender: student.gender || '',
           home_address: student.address || student.home_address || '',
           city: student.city || '',
           state: student.state || '',
@@ -171,39 +170,127 @@ const StudentForm = () => {
     }
   };
 
+  const validateField = (name, value) => {
+    let error = '';
+
+    switch (name) {
+      case 'firstName':
+        error = validateRequired(value, 'First name');
+        break;
+      case 'lastName':
+        error = validateRequired(value, 'Last name');
+        break;
+      case 'email':
+        error = validateEmail(value);
+        break;
+      case 'mobile':
+        error = validateMobile(value);
+        break;
+      case 'dob':
+        error = validateDate(value, { past: true, label: 'Date of Birth' });
+        if (!error && value) {
+          const year = new Date(value).getFullYear();
+          if (year < 1900) error = 'Please enter a valid birth year';
+        }
+        break;
+      case 'passport_expiry':
+        if (!value) {
+          error = 'Passport expiry date is required';
+        } else {
+          error = validateDate(value, { label: 'Passport' });
+          if (!error) {
+            const date = new Date(value);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            const sixMonthsFuture = new Date();
+            sixMonthsFuture.setMonth(today.getMonth() + 6);
+            sixMonthsFuture.setHours(0, 0, 0, 0);
+
+            if (date < sixMonthsFuture) error = 'Passport must be valid for at least 6 months';
+            if (date.getFullYear() > 2100) error = 'Please enter a realistic expiry year';
+          }
+        }
+        break;
+      case 'education_country':
+        error = validateRequired(value, 'Education country');
+        break;
+      case 'highest_level':
+        error = validateRequired(value, 'Highest level');
+        break;
+      case 'grading_scheme':
+        error = validateRequired(value, 'Grading scheme');
+        break;
+      case 'grade_average':
+        error = validateRequired(value, 'Grade average/score');
+        break;
+      case 'visa_refusal':
+        error = validateRequired(value, 'Visa refusal status');
+        break;
+      case 'study_permit':
+        error = validateRequired(value, 'Study permit status');
+        break;
+      // Step 3: Test Scores Validation
+      case 'exam_type':
+        error = validateRequired(value, 'Exam type');
+        break;
+      case 'exam_date':
+        if (!value) {
+          error = 'Exam date is required';
+        } else {
+          error = validateDate(value, { past: true, label: 'Exam date' });
+          if (!error) {
+            const year = new Date(value).getFullYear();
+            if (year < 1990) error = 'Please enter a valid exam year (1990-Present)';
+          }
+        }
+        break;
+      case 'listening_score':
+      case 'reading_score':
+      case 'writing_score':
+      case 'speaking_score':
+      case 'overall_score':
+        error = validateNumber(value, { positive: true, label: 'Score' });
+        break;
+      // Optional fields that might need validation if provided
+      case 'passport_number':
+        error = validateRequired(value, 'Passport Number');
+        break;
+      default:
+        break;
+    }
+    return error;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
-    // Clear error for this field
-    if (errors[name]) {
-      setErrors({ ...errors, [name]: '' });
-    }
+
+    // Live Validation
+    const error = validateField(name, value);
+    setErrors(prev => ({
+      ...prev,
+      [name]: error
+    }));
   };
 
   const validateStep = (step) => {
     const newErrors = {};
-    if (step === 1) {
-      if (!formData.firstName) newErrors.firstName = 'First name is required';
-      if (!formData.lastName) newErrors.lastName = 'Last name is required';
-      if (!formData.email) {
-        newErrors.email = 'Email is required';
-      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-        newErrors.email = 'Invalid email format';
+    const stepFields = {
+      1: ['firstName', 'lastName', 'email', 'mobile', 'dob', 'passport_expiry'],
+      2: ['education_country', 'highest_level', 'grading_scheme', 'grade_average'],
+      3: ['exam_type', 'exam_date', 'listening_score', 'reading_score', 'writing_score', 'speaking_score', 'overall_score'],
+      4: ['visa_refusal', 'study_permit']
+    };
+
+    const fieldsToCheck = stepFields[step] || [];
+
+    fieldsToCheck.forEach(field => {
+      const error = validateField(field, formData[field]);
+      if (error) {
+        newErrors[field] = error;
       }
-      if (!formData.mobile) {
-        newErrors.mobile = 'Mobile number is required';
-      } else if (!/^\d{10}$/.test(formData.mobile)) {
-        newErrors.mobile = 'Mobile number must be 10 digits';
-      }
-    } else if (step === 2) {
-      if (!formData.education_country) newErrors.education_country = 'Education country is required';
-      if (!formData.highest_level) newErrors.highest_level = 'Highest level is required';
-      if (!formData.grading_scheme) newErrors.grading_scheme = 'Grading scheme is required';
-      if (!formData.grade_average) newErrors.grade_average = 'Grade average/score is required';
-    } else if (step === 4) {
-      if (!formData.visa_refusal) newErrors.visa_refusal = 'Please select visa refusal status';
-      if (!formData.study_permit) newErrors.study_permit = 'Please select study permit status';
-    }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -233,10 +320,22 @@ const StudentForm = () => {
   };
 
   const handleFinalSubmit = async (shouldNavigate = true) => {
-    // For step 4 to 5 transition, we must validate step 4
-    if (!shouldNavigate && !validateStep(4)) {
+    if (!shouldNavigate && !validateStep(currentStep)) {
       toast.error('Please fix the errors before proceeding');
       return;
+    }
+
+    // New Logic: If creating student, we only create at Step 5 (shouldNavigate=true)
+    // If shouldNavigate is false (Step 4 "Save & Next"), we just proceed to step 5 without API call
+    if (!isEditMode && !shouldNavigate) {
+      if (validateStep(4)) {
+        setCurrentStep(5);
+        window.scrollTo(0, 0);
+        return;
+      } else {
+        toast.error('Please fix the errors before proceeding');
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -250,19 +349,19 @@ const StudentForm = () => {
         countryCode: formData.c_code,
         fatherName: formData.father,
         motherName: formData.mother,
-        dateOfBirth: formData.dob,
-        firstLanguage: formData.first_language,
+        // Send null for empty dates to avoid Mongoose CastError
+        dateOfBirth: formData.dob || null,
         nationality: formData.nationality,
         passportNumber: formData.passport_number,
-        passportExpiry: formData.passport_expiry,
-        maritalStatus: formData.marital_status,
-        gender: formData.gender,
+        passportExpiry: formData.passport_expiry || null,
+        maritalStatus: formData.marital_status || 'Single',
+        gender: formData.gender || null, // Send null if empty to avoid enum validation error
         address: formData.home_address,
         city: formData.city,
         state: formData.state,
         country: formData.country,
         postalCode: formData.zipcode,
-        home_contact_number: formData.home_contact_number,
+        homeContactNumber: formData.home_contact_number,
         referredBy: formData.referredBy,
         // Education
         educationCountry: formData.education_country,
@@ -271,7 +370,7 @@ const StudentForm = () => {
         gradeAverage: formData.grade_average,
         // Test Scores
         examType: formData.exam_type,
-        examDate: formData.exam_date,
+        examDate: formData.exam_date || null,
         listeningScore: formData.listening_score,
         readingScore: formData.reading_score,
         writingScore: formData.writing_score,
@@ -284,29 +383,36 @@ const StudentForm = () => {
       };
 
       let response;
+      let newStudentId = studentId;
+
       if (isEditMode) {
         response = await studentService.updateStudent(id, submissionData);
       } else {
+        // Create student only on Final Submit
         response = await studentService.createStudent(submissionData);
-        const newId = response?.data?.student?._id || response?.data?.student?.id || response?.data?._id || response?.data?.id;
-        if (newId) {
-          setStudentId(newId);
-          // Fetch fresh data for Step 5 Document Upload
-          const fresh = await studentService.getStudentById(newId);
-          setStudentDataForDocs(fresh?.data?.student || fresh?.data);
+        newStudentId = response?.data?.student?._id || response?.data?.student?.id || response?.data?._id || response?.data?.id;
+
+        // Upload pending documents if any
+        if (newStudentId && pendingDocs.length > 0) {
+          for (const doc of pendingDocs) {
+            try {
+              const docFormData = new FormData();
+              docFormData.append('documentName', doc.key || doc.label);
+              docFormData.append('file', doc.file);
+              await studentService.uploadDocument(newStudentId, docFormData);
+            } catch (docErr) {
+              console.error(`Failed to upload ${doc.label}:`, docErr);
+              // We continue uploading other docs even if one fails
+            }
+          }
         }
       }
 
-      if (shouldNavigate) {
-        toast.success(`Student ${isEditMode ? 'updated' : 'created'} successfully!`);
-        setTimeout(() => {
-          navigate('/students');
-        }, 1500);
-      } else {
-        toast.success('Basic information saved. Proceed to document upload.');
-        setCurrentStep(5);
-        window.scrollTo(0, 0);
-      }
+      toast.success(`Student ${isEditMode ? 'updated' : 'created'} successfully!`);
+      setTimeout(() => {
+        navigate('/students');
+      }, 1500);
+
     } catch (err) {
       console.error('Submission error:', err);
       toast.error(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} student`);
@@ -496,8 +602,9 @@ const StudentForm = () => {
                   name="dob"
                   value={formData.dob}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.dob ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.dob && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.dob}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">First Language</label>
@@ -537,8 +644,9 @@ const StudentForm = () => {
                   name="passport_expiry"
                   value={formData.passport_expiry}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.passport_expiry ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.passport_expiry && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.passport_expiry}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Marital Status</label>
@@ -704,7 +812,7 @@ const StudentForm = () => {
                   name="exam_type"
                   value={formData.exam_type}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.exam_type ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 >
                   <option value="">Select exam</option>
                   <option>IELTS</option>
@@ -712,6 +820,7 @@ const StudentForm = () => {
                   <option>PTE</option>
                   <option>Duolingo</option>
                 </select>
+                {errors.exam_type && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.exam_type}</p>}
               </div>
               <div className="col-span-1 md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">Exam Date</label>
@@ -720,63 +829,71 @@ const StudentForm = () => {
                   name="exam_date"
                   value={formData.exam_date}
                   onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                  className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.exam_date ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                 />
+                {errors.exam_date && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.exam_date}</p>}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Listening Score</label>
-                <input
-                  type="text"
-                  name="listening_score"
-                  placeholder="0.0"
-                  value={formData.listening_score}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reading Score</label>
-                <input
-                  type="text"
-                  name="reading_score"
-                  placeholder="0.0"
-                  value={formData.reading_score}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Writing Score</label>
-                <input
-                  type="text"
-                  name="writing_score"
-                  placeholder="0.0"
-                  value={formData.writing_score}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Speaking Score</label>
-                <input
-                  type="text"
-                  name="speaking_score"
-                  placeholder="0.0"
-                  value={formData.speaking_score}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                />
-              </div>
-              <div className="col-span-1 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Overall Score</label>
-                <input
-                  type="text"
-                  name="overall_score"
-                  placeholder="0.0"
-                  value={formData.overall_score}
-                  onChange={handleChange}
-                  className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition"
-                />
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 col-span-1 md:col-span-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Listening</label>
+                  <input
+                    type="text"
+                    name="listening_score"
+                    placeholder="0.0"
+                    value={formData.listening_score}
+                    onChange={handleChange}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.listening_score ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {errors.listening_score && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.listening_score}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Reading</label>
+                  <input
+                    type="text"
+                    name="reading_score"
+                    placeholder="0.0"
+                    value={formData.reading_score}
+                    onChange={handleChange}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.reading_score ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {errors.reading_score && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.reading_score}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Writing</label>
+                  <input
+                    type="text"
+                    name="writing_score"
+                    placeholder="0.0"
+                    value={formData.writing_score}
+                    onChange={handleChange}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.writing_score ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {errors.writing_score && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.writing_score}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Speaking</label>
+                  <input
+                    type="text"
+                    name="speaking_score"
+                    placeholder="0.0"
+                    value={formData.speaking_score}
+                    onChange={handleChange}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.speaking_score ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {errors.speaking_score && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.speaking_score}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Overall</label>
+                  <input
+                    type="text"
+                    name="overall_score"
+                    placeholder="0.0"
+                    value={formData.overall_score}
+                    onChange={handleChange}
+                    className={`w-full border rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 outline-none transition ${errors.overall_score ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                  />
+                  {errors.overall_score && <p className="text-red-500 text-[10px] mt-1 font-bold italic uppercase">{errors.overall_score}</p>}
+                </div>
               </div>
             </div>
           </div>
@@ -843,7 +960,8 @@ const StudentForm = () => {
               </p>
             </div>
 
-            {studentDataForDocs ? (
+            {/* In Edit Mode -> Render with live student data */}
+            {isEditMode && studentDataForDocs ? (
               <StudentDocumentUpload
                 student={studentDataForDocs}
                 isAdmin={user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN}
@@ -852,6 +970,15 @@ const StudentForm = () => {
                   setStudentDataForDocs(fresh?.data?.student || fresh?.data);
                 }}
               />
+            ) : !isEditMode ? (
+              /* In Create Mode -> Render with pendingDocs state (Client Side) */
+              <StudentDocumentUpload
+                student={null} // No student yet
+                isManualMode={true}
+                pendingDocs={pendingDocs}
+                setPendingDocs={setPendingDocs}
+                isAdmin={user?.role === ROLES.ADMIN || user?.role === ROLES.SUPER_ADMIN}
+              />
             ) : (
               <div className="p-12 text-center bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200">
                 <Loader2 className="w-12 h-12 text-indigo-600 animate-spin mx-auto mb-4" />
@@ -859,18 +986,28 @@ const StudentForm = () => {
               </div>
             )}
 
-            <div className="mt-8 pt-8 border-t flex justify-end">
+            <div className="mt-8 pt-8 border-t flex justify-between">
+              {/* Previous Button for Step 5 */}
+              <button
+                onClick={handlePrevious}
+                className="px-6 py-3 bg-gray-300 text-gray-700 hover:bg-gray-400 rounded-lg font-medium transition-all"
+              >
+                Previous
+              </button>
+
               <button
                 onClick={() => handleFinalSubmit(true)}
-                className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:scale-[1.02] active:scale-95"
+                disabled={isSubmitting}
+                className="px-10 py-4 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200 hover:scale-[1.02] active:scale-95 flex items-center gap-2"
               >
-                Finish & Exit
+                {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : null}
+                {isEditMode ? 'Update & Exit' : 'Create & Exit'}
               </button>
             </div>
           </div>
         )}
 
-        {/* Navigation */}
+        {/* Navigation for Steps 1-4 */}
         {currentStep < 5 && (
           <div className="flex flex-col-reverse md:flex-row justify-between gap-4 mt-8 pt-6 border-t">
             <button
@@ -884,32 +1021,16 @@ const StudentForm = () => {
               Previous
             </button>
             <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-              <button
-                onClick={handleSaveStep}
-                className="px-6 py-3 border-2 border-indigo-600 text-indigo-600 hover:bg-indigo-50 rounded-lg font-medium transition-all flex items-center gap-2"
-              >
-                <Save size={18} />
-                Save Progress
-              </button>
+              {/* Removed Save Progress Button */}
               {currentStep < 5 ? (
                 <button
                   onClick={currentStep === 4 ? () => handleFinalSubmit(false) : handleNext}
-                  className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg"
+                  className="px-6 py-3 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg cursor-pointer"
                 >
-                  {currentStep === 4 ? (isSubmitting ? 'Saving...' : 'Save & Next') : 'Save & Next'}
+                  {currentStep === 4 ? (isSubmitting ? 'Saving...' : 'Next') : 'Save & Next'}
                   {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight size={18} />}
                 </button>
-              ) : (
-                <button
-                  onClick={() => handleFinalSubmit(true)}
-                  className={`px-6 py-3 text-white rounded-lg font-medium transition-all flex items-center gap-2 shadow-lg ${isSubmitting ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-600 hover:bg-green-700'
-                    }`}
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Check size={18} />}
-                  {isEditMode ? 'Update Student' : 'Create Student'}
-                </button>
-              )}
+              ) : null}
             </div>
           </div>
         )}

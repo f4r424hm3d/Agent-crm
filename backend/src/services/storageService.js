@@ -23,10 +23,11 @@ const moveFileToEntityFolder = (file, entity, documentKey, subFolder = 'agents')
 
     // 1. Prepare folder name components
     const entityName = sanitize(entity.firstName + ' ' + entity.lastName);
-    const entityId = entity._id.toString();
+    // Use email for folder name as requested (or fallback to ID if no email, though email should be there)
+    const uniqueIdentifier = entity.email ? sanitize(entity.email) : entity._id.toString();
 
     // 2. Construct folder path
-    const folderName = `${entityName}_${entityId}`;
+    const folderName = `${entityName}_${uniqueIdentifier}`;
     const targetDir = path.join(process.cwd(), UPLOADS_BASE, folderName);
 
     // 3. Create directory

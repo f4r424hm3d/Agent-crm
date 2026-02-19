@@ -188,7 +188,9 @@ const StudentDetails = ({ studentId: explicitId, forceReadOnly = false }) => {
     if (!url || typeof url !== 'string') return '';
     if (url.startsWith('http')) return url;
     const backendUrl = import.meta.env.VITE_API_URL?.replace('/api', '') || 'http://localhost:5000';
-    return `${backendUrl}/${url}`;
+    // Remove leading slash from url if present
+    const cleanUrl = url.startsWith('/') ? url.slice(1) : url;
+    return `${backendUrl}/${cleanUrl}`;
   };
 
   const handleTabClick = (tab, ref) => {
@@ -330,7 +332,13 @@ const StudentDetails = ({ studentId: explicitId, forceReadOnly = false }) => {
                         const docs = studentData.documents || {};
                         // Robust check: find any key that includes 'photo' and has a value
                         const photoKey = Object.keys(docs).find(k => k.toLowerCase().includes('photo') && docs[k]);
-                        const url = photoKey ? docs[photoKey] : null;
+
+                        let url = photoKey ? docs[photoKey] : null;
+
+                        // Handle object format (from public uploads) vs string format (from manual uploads)
+                        if (url && typeof url === 'object' && url.documentUrl) {
+                          url = url.documentUrl;
+                        }
 
                         if (url) {
                           return (

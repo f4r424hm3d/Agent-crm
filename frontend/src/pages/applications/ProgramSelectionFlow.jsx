@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
     ChevronRight, ChevronLeft, Search, GraduationCap, Building2,
     Globe, BookOpen, Layers, CheckCircle, AlertCircle,
-    RefreshCw, Filter, ArrowRight, Star, Clock, Sparkles
+    RefreshCw, Filter, ArrowRight, Star, Clock, Sparkles, Loader2
 } from 'lucide-react';
 import externalSearchService from '../../services/externalSearchService';
 import studentService from '../../services/studentService';
@@ -492,25 +492,16 @@ const ProgramSelectionFlow = () => {
             </div>
 
             {/* Selection Grid */}
-            <div className="min-h-[500px] mb-32">
+            <div className="">
                 <AnimatePresence mode="wait">
                     {loading ? (
                         <motion.div
                             key="loader"
                             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="flex flex-col items-center justify-center h-[500px] glass-card rounded-[60px] border-dashed border-2 border-gray-100"
+                            className="flex flex-col items-center justify-center h-[500px]"
                         >
-                            <div className="relative">
-                                <motion.div
-                                    animate={{ rotate: 360 }}
-                                    transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                                    className="w-24 h-24 border-[6px] border-primary-100 border-t-primary-600 rounded-full"
-                                />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <Sparkles className="text-primary-600 animate-pulse" size={32} />
-                                </div>
-                            </div>
-                            <p className="mt-8 text-sm font-black uppercase tracking-[0.5em] text-gray-400">Synchronizing Data...</p>
+                            <Loader2 className="w-12 h-12 text-indigo-600 animate-spin" />
+                            <p className="mt-4 text-sm font-medium text-gray-500">Loading options...</p>
                         </motion.div>
                     ) : (
                         <motion.div
@@ -820,7 +811,7 @@ const ProgramSelectionFlow = () => {
                         initial={{ opacity: 0, y: 100 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 100 }}
-                        className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] lg:w-[1000px] z-50"
+                        className="mt-8 w-full z-10"
                     >
                         <div className="bg-white flex flex-col md:flex-row items-center justify-between p-4 px-8 rounded-xl shadow-xl border border-gray-200">
                             <div className="hidden lg:flex items-center space-x-6">

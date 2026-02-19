@@ -392,6 +392,72 @@ class StudentController {
         }
       }
 
+      // Delete student documents folder
+      // Delete student documents folder
+      const fs = require('fs');
+      const path = require('path');
+      // sanitize is imported at the top of the file
+
+      try {
+        const baseUploadPath = 'uploads/documents/students';
+        let deleted = false;
+
+        // 1. Try Standardized Name_Email format (New Standard)
+        if (student.email) {
+          const entityName = sanitize(student.firstName + ' ' + student.lastName);
+          const safeEmail = sanitize(student.email);
+          const emailFolder = `${entityName}_${safeEmail}`;
+          const emailPath = path.join(process.cwd(), baseUploadPath, emailFolder);
+
+          if (fs.existsSync(emailPath)) {
+            fs.rmSync(emailPath, { recursive: true, force: true });
+            console.log(`Deleted folder (Email): ${emailPath}`);
+            deleted = true;
+          }
+
+          // Also try "Simple Replace" format (Legacy/Mixed)
+          // Some controllers might have used simple replace instead of sanitize
+          if (!deleted) {
+            const simpleSafeName = `${student.firstName}_${student.lastName}`.replace(/[^a-zA-Z0-9]/g, '_');
+            const simpleSafeEmail = student.email.replace(/[^a-zA-Z0-9]/g, '_');
+            const simpleEmailFolder = `${simpleSafeName}_${simpleSafeEmail}`;
+            const simpleEmailPath = path.join(process.cwd(), baseUploadPath, simpleEmailFolder);
+            if (fs.existsSync(simpleEmailPath)) {
+              fs.rmSync(simpleEmailPath, { recursive: true, force: true });
+              console.log(`Deleted folder (Simple Email): ${simpleEmailPath}`);
+              deleted = true;
+            }
+          }
+        }
+
+        // 2. Legacy: TempId (Public Drafts)
+        if (!deleted && student.tempStudentId) {
+          const safeName = `${student.firstName}_${student.lastName}`.replace(/[^a-zA-Z0-9]/g, '_');
+          const tempFolder = `${safeName}_${student.tempStudentId}`;
+          const tempFullPath = path.join(process.cwd(), baseUploadPath, tempFolder);
+          if (fs.existsSync(tempFullPath)) {
+            fs.rmSync(tempFullPath, { recursive: true, force: true });
+            console.log(`Deleted temp folder: ${tempFullPath}`);
+            deleted = true;
+          }
+        }
+
+        // 3. Legacy: MongoDB ID (Old Manual Uploads)
+        if (!deleted) {
+          const entityName = sanitize(student.firstName + ' ' + student.lastName);
+          const entityId = student._id.toString();
+          const idFolder = `${entityName}_${entityId}`;
+          const idFullPath = path.join(process.cwd(), baseUploadPath, idFolder);
+          if (fs.existsSync(idFullPath)) {
+            fs.rmSync(idFullPath, { recursive: true, force: true });
+            console.log(`Deleted ID folder: ${idFullPath}`);
+          }
+        }
+
+      } catch (err) {
+        console.error('Error deleting student document folder:', err);
+      }
+
       await Student.findByIdAndDelete(id);
 
       // Log audit
@@ -432,11 +498,31 @@ class StudentController {
         nationality,
         passportNumber,
         passportExpiry,
+        maritalStatus,
         address,
         city,
+        state,
         country,
         postalCode,
-        referredBy
+        homeContactNumber,
+        referredBy,
+        // Education
+        educationCountry,
+        highestLevel,
+        gradingScheme,
+        gradeAverage,
+        // Test Scores
+        examType,
+        examDate,
+        listeningScore,
+        readingScore,
+        writingScore,
+        speakingScore,
+        overallScore,
+        // Background
+        visaRefusal,
+        studyPermit,
+        backgroundDetails
       } = req.body;
 
       // Check if email exists
@@ -477,16 +563,34 @@ class StudentController {
         nationality,
         passportNumber,
         passportExpiry,
+        maritalStatus,
         address,
         city,
+        state,
         country,
         postalCode,
+        homeContactNumber,
         referredBy: req.userRole === 'AGENT' ? req.userId : (referredBy || null),
         agentId: req.userRole === 'AGENT' ? req.userId : (referredBy || null), // Set both for consistency
         isCompleted: true, // Manual creation is always completed
         isDraft: false,
         isEmailVerified: true, // Admin created students don't need email verification
-        emailVerifiedAt: new Date()
+        emailVerifiedAt: new Date(),
+        // New Fields
+        educationCountry,
+        highestLevel,
+        gradingScheme,
+        gradeAverage,
+        examType,
+        examDate,
+        listeningScore,
+        readingScore,
+        writingScore,
+        speakingScore,
+        overallScore,
+        visaRefusal,
+        studyPermit,
+        backgroundDetails
       });
 
       await student.save();
