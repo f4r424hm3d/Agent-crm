@@ -13,6 +13,12 @@ export const applicationService = {
     return response.data;
   },
 
+  // Get all applications for a specific student
+  getStudentApplications: async (studentId) => {
+    const response = await apiClient.get(`/applications/student/${studentId}`);
+    return response.data;
+  },
+
   // Create application
   createApplication: async (data) => {
     const response = await apiClient.post('/applications', data);
@@ -31,15 +37,35 @@ export const applicationService = {
     return response.data;
   },
 
-  // Submit application
-  submitApplication: async (id) => {
-    return applicationService.updateStatus(id, 'submitted', 'Application submitted');
-  },
-
-  // Update status
+  // Update payment status (paid/unpaid/cancelled)
   updateStatus: async (id, status, notes) => {
     const response = await apiClient.put(`/applications/${id}/status`, { status, notes });
     return response.data;
+  },
+
+  // Update stage
+  updateStage: async (id, stage, notes) => {
+    const response = await apiClient.put(`/applications/${id}/stage`, { stage, notes });
+    return response.data;
+  },
+
+  // Update payment with proof files
+  updatePayment: async (id, formData) => {
+    const response = await apiClient.put(`/applications/${id}/pay`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+
+  // Send application mail
+  sendMail: async (id, mailData) => {
+    const response = await apiClient.post(`/applications/${id}/send-mail`, mailData);
+    return response.data;
+  },
+
+  // Submit application (shorthand)
+  submitApplication: async (id) => {
+    return applicationService.updateStatus(id, 'submitted', 'Application submitted');
   },
 
   // Upload document

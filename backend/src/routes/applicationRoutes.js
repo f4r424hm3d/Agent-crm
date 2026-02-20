@@ -4,6 +4,31 @@ const ApplicationController = require('../controllers/applicationController');
 const authMiddleware = require('../middlewares/authMiddleware');
 const { roleMiddleware, roles } = require('../middlewares/roleMiddleware');
 const { body } = require('express-validator');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+// Multer for payment proof uploads
+const paymentStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const tempDir = path.join(__dirname, '../../uploads/temp');
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+    cb(null, tempDir);
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `pay-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+const paymentUpload = multer({
+  storage: paymentStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error('Only JPG, PNG, PDF files are allowed'), false);
+  }
+});
 
 const validateRequest = (req, res, next) => {
   const { validationResult } = require('express-validator');
@@ -14,7 +39,7 @@ const validateRequest = (req, res, next) => {
   next();
 };
 
-const applicationLockMiddleware = require('../middlewares/applicationLockMiddleware');
+// ── Static routes first (before :id param routes) ──
 
 /**
  * @route   GET /api/applications/pending-students
@@ -29,6 +54,13 @@ router.get('/pending-students', authMiddleware, ApplicationController.getPending
  * @access  Private (Agent, Admin)
  */
 router.get('/applied-students', authMiddleware, ApplicationController.getAppliedStudents);
+
+/**
+ * @route   GET /api/applications/student/:studentId
+ * @desc    Get all applications for a specific student
+ * @access  Private
+ */
+router.get('/student/:studentId', authMiddleware, ApplicationController.getStudentApplications);
 
 /**
  * @route   GET /api/applications
@@ -54,20 +86,77 @@ router.post(
   ApplicationController.createApplication
 );
 
-/**
- * @route   PUT /api/applications/:id
- * @desc    Update application
- * @access  Private (Agent, Admin)
- */
-router.put('/:id', authMiddleware, applicationLockMiddleware, ApplicationController.getApplications); // Placeholder for update functionality if needed later
+// ── Param routes ──
 
-// Existing status update route with lock middleware
+/**
+ * @route   GET /api/applications/:id
+ * @desc    Get single application by ID
+ * @access  Private
+ */
+router.get('/:id', authMiddleware, ApplicationController.getApplicationById);
+
+/**
+ * @route   DELETE /api/applications/:id
+ * @desc    Delete application (only if not paid)
+ * @access  Private
+ */
+router.delete('/:id', authMiddleware, ApplicationController.deleteApplication);
+
+/**
+ * @route   PUT /api/applications/:id/status
+ * @desc    Update application payment status
+ * @access  Private (Admin, SuperAdmin)
+ */
 router.put(
   '/:id/status',
   authMiddleware,
-  applicationLockMiddleware,
-  roleMiddleware(roles.ALL_ADMINS),
-  ApplicationController.getApplications // Placeholder
+  [
+    body('status').notEmpty().isIn(['paid', 'unpaid', 'cancelled']).withMessage('Status must be paid, unpaid, or cancelled'),
+  ],
+  validateRequest,
+  ApplicationController.updateApplicationStatus
+);
+
+/**
+ * @route   PUT /api/applications/:id/stage
+ * @desc    Update application stage
+ * @access  Private (Admin, SuperAdmin)
+ */
+router.put(
+  '/:id/stage',
+  authMiddleware,
+  [
+    body('stage').notEmpty().withMessage('Stage is required'),
+  ],
+  validateRequest,
+  ApplicationController.updateApplicationStage
+);
+
+/**
+ * @route   POST /api/applications/:id/send-mail
+ * @desc    Send email for an application
+ * @access  Private
+ */
+router.post(
+  '/:id/send-mail',
+  authMiddleware,
+  [
+    body('sentTo').notEmpty().isEmail().withMessage('Valid recipient email is required'),
+    body('messageBody').notEmpty().withMessage('Message body is required'),
+  ],
+  validateRequest,
+  ApplicationController.sendApplicationMail
+);
+/**
+ * @route   PUT /api/applications/:id/pay
+ * @desc    Update payment with proof files
+ * @access  Private
+ */
+router.put(
+  '/:id/pay',
+  authMiddleware,
+  paymentUpload.array('paymentProof', 5),
+  ApplicationController.updatePayment
 );
 
 module.exports = router;
