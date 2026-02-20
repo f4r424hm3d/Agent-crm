@@ -1,11 +1,17 @@
 const mongoose = require('mongoose');
 
-// Sub-schema for status history (embedded)
+// Sub-schema for unified activity history (status/stage/mail changes)
 const statusHistorySchema = new mongoose.Schema({
+  actionType: {
+    type: String,
+    enum: ['status', 'stage', 'mail'],
+    required: true
+  },
+  oldValue: String,
+  newValue: String,
   oldStatus: String,
   newStatus: {
-    type: String,
-    required: true
+    type: String
   },
   changedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -14,6 +20,32 @@ const statusHistorySchema = new mongoose.Schema({
   changedByName: String, // Denormalized
   notes: String,
   changedAt: {
+    type: Date,
+    default: Date.now
+  }
+}, { _id: true });
+
+// Sub-schema for mail history
+const mailHistorySchema = new mongoose.Schema({
+  sentTo: { type: String, required: true },
+  cc: String,
+  subject: String,
+  greeting: String,
+  recipientName: String,
+  messageBody: String,
+  senderName: String,
+  htmlSnapshot: String,
+  attachedDocuments: [{
+    documentKey: String,
+    fileName: String,
+    filePath: String
+  }],
+  sentBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  sentByName: String,
+  sentAt: {
     type: Date,
     default: Date.now
   }
@@ -87,6 +119,14 @@ const applicationSchema = new mongoose.Schema({
     default: 'unpaid'
   },
   paymentDate: Date,
+  paymentProof: [{
+    fileName: String,
+    originalName: String,
+    path: String,
+    mimeType: String,
+    size: Number,
+    uploadedAt: { type: Date, default: Date.now }
+  }],
   applyDate: {
     type: Date,
     default: Date.now
@@ -111,7 +151,8 @@ const applicationSchema = new mongoose.Schema({
 
   // Metadata
   notes: String,
-  statusHistory: [statusHistorySchema]
+  statusHistory: [statusHistorySchema],
+  mailHistory: [mailHistorySchema]
 }, {
   timestamps: true
 });

@@ -77,6 +77,8 @@ import ApplicationForm from "./pages/applications/ApplicationForm";
 import AppliedStudents from "./pages/applications/AppliedStudents";
 import PendingStudents from "./pages/applications/PendingStudents";
 import ProgramSelectionFlow from "./pages/applications/ProgramSelectionFlow";
+import StudentApplicationsList from "./pages/applications/StudentApplicationsList";
+import ApplicationDetail from "./pages/applications/ApplicationDetail";
 
 // Commission Pages
 import CommissionList from "./pages/commissions/CommissionList";
@@ -494,6 +496,26 @@ function AppContent() {
               allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT]}
             >
               <ApplicationForm />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="student-applications/:studentId"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT]}
+            >
+              <StudentApplicationsList />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="applications/:id"
+          element={
+            <ProtectedRoute
+              allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN, ROLES.AGENT, ROLES.STUDENT]}
+            >
+              <ApplicationDetail />
             </ProtectedRoute>
           }
         />

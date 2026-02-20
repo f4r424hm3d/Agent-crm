@@ -201,7 +201,7 @@ const AppliedStudents = () => {
                                                     <button
                                                         onClick={(e) => {
                                                             e.stopPropagation();
-                                                            navigate(`/pending-applications?studentId=${student._id}`);
+                                                            navigate(`/student-applications/${student._id}`);
                                                         }}
                                                         className="p-1 hover:bg-green-100 rounded-full transition-colors"
                                                         title="Add Another Application"
@@ -216,7 +216,7 @@ const AppliedStudents = () => {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <button
-                                                onClick={() => navigate(`/students/${student._id}`)}
+                                                onClick={() => navigate(`/student-applications/${student._id}`)}
                                                 className="px-3 py-1.5 border border-blue-300 bg-blue-50 text-blue-700 rounded-lg text-sm font-medium hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5 cursor-pointer"
                                                 title="View Details"
                                             >
