@@ -42,6 +42,7 @@ import AgentList from "./pages/agents/AgentList";
 
 import AgentDetailView from "./pages/agents/AgentDetailView";
 import Settings from './pages/admin/Settings';
+import MailSignatures from './pages/admin/MailSignatures';
 import PendingAgents from "./pages/agents/PendingAgents";
 import AdminCreateAgent from "./pages/agents/AdminCreateAgent";
 import AdminEditAgent from "./pages/agents/AdminEditAgent";
@@ -632,6 +633,14 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN]}>
               <Settings />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="admin/mail-signatures"
+          element={
+            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
+              <MailSignatures />
             </ProtectedRoute>
           }
         />

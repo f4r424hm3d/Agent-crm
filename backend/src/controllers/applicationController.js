@@ -779,8 +779,7 @@ class ApplicationController {
 
       const oldStatus = application.paymentStatus;
 
-      // Update payment
-      application.paymentStatus = 'paid';
+      // We ONLY update the paymentDate, we DO NOT change the paymentStatus to 'paid' anymore.
       application.paymentDate = paymentDate ? new Date(paymentDate) : new Date();
 
       // Handle uploaded files
@@ -824,18 +823,18 @@ class ApplicationController {
       application.statusHistory.push({
         actionType: 'status',
         oldValue: oldStatus,
-        newValue: 'paid',
+        newValue: oldStatus, // Status remains the same
         oldStatus: oldStatus,
-        newStatus: 'paid',
+        newStatus: oldStatus, // Status remains the same
         changedBy: req.userId,
         changedByName: userName,
-        notes: notes || `Payment marked as paid`,
+        notes: notes || `Invoice uploaded`,
         changedAt: new Date()
       });
 
       await application.save();
 
-      await AuditService.logStatusChange(req.user, 'Application', application._id, oldStatus, 'paid', req);
+      await AuditService.logStatusChange(req.user, 'Application', application._id, oldStatus, oldStatus, req);
       logger.info('Payment updated', {
         applicationNo: application.applicationNo,
         proofCount: req.files?.length || 0

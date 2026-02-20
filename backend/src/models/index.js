@@ -20,6 +20,7 @@ const BrochureType = require('./BrochureType');
 const BrochureCategory = require('./BrochureCategory');
 const UniversityProgram = require('./UniversityProgram');
 const AgentUniversityAssignment = require('./AgentUniversityAssignment'); // Added based on Code Edit
+const MailSignature = require('./MailSignature');
 
 // Removed: CommissionRule, Commission, Payout based on Code Edit
 
@@ -43,6 +44,7 @@ module.exports = {
   BrochureCategory,
   UniversityProgram,
   AgentUniversityAssignment,
+  MailSignature,
   Commission,
   CommissionRule,
   Payout

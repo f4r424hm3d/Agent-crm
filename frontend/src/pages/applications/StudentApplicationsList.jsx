@@ -133,24 +133,73 @@ Hand Phone: +60-104306704, +91-9870406867
 WeChat, Kakao Talk: +60-104306704
 Facebook page: https://www.facebook.com/educationmalaysia.in`;
 
+// Added import at the top of the file in the next step, assuming it's done or we'll add it along with the component updates.
 const SendMailModal = ({ isOpen, onClose, application, student, onSend, loading }) => {
     const [form, setForm] = useState({
         sentTo: '', cc: '', greeting: DEFAULT_GREETING, messageBody: DEFAULT_MESSAGE, footer: DEFAULT_FOOTER
     });
     const [selectedDocs, setSelectedDocs] = useState([]);
+    const [mailSignatures, setMailSignatures] = useState([]);
+    const [selectedSignatureId, setSelectedSignatureId] = useState('');
+    const [isLoadingSignatures, setIsLoadingSignatures] = useState(false);
+
+    // Fetch signatures when modal opens
+    useEffect(() => {
+        if (isOpen) {
+            fetchSignatures();
+        }
+    }, [isOpen]);
+
+    const fetchSignatures = async () => {
+        try {
+            setIsLoadingSignatures(true);
+            // Dynamic import or assume it's imported at the top (will fix imports in a separate call)
+            const { default: mailSignatureService } = await import('../../services/mailSignatureService');
+            const response = await mailSignatureService.getSignatures();
+            const fetchedSigs = response.data || [];
+            setMailSignatures(fetchedSigs);
+
+            // Find active signature
+            const activeSig = fetchedSigs.find(s => s.isActive);
+            if (activeSig) {
+                setSelectedSignatureId(activeSig._id);
+                // We'll update the form footer in the other useEffect
+            }
+        } catch (error) {
+            console.error('Failed to fetch mail signatures:', error);
+        } finally {
+            setIsLoadingSignatures(false);
+        }
+    };
 
     useEffect(() => {
         if (isOpen && student) {
-            setForm({
+            setForm(prev => ({
+                ...prev,
                 sentTo: student.email || '',
                 cc: '',
                 greeting: DEFAULT_GREETING,
                 messageBody: DEFAULT_MESSAGE,
-                footer: DEFAULT_FOOTER
-            });
+                // footer is handled separately now based on signature selection
+            }));
             setSelectedDocs([]);
         }
     }, [isOpen, student]);
+
+    // Handle Signature Selection Change
+    useEffect(() => {
+        if (!isOpen) return;
+
+        if (selectedSignatureId === 'default' || !selectedSignatureId) {
+            setForm(prev => ({ ...prev, footer: DEFAULT_FOOTER }));
+            return;
+        }
+
+        const sig = mailSignatures.find(s => s._id === selectedSignatureId);
+        if (sig && sig.signatureContent) {
+            setForm(prev => ({ ...prev, footer: sig.signatureContent }));
+        }
+    }, [selectedSignatureId, mailSignatures, isOpen]);
 
     if (!isOpen) return null;
 
@@ -239,16 +288,28 @@ const SendMailModal = ({ isOpen, onClose, application, student, onSend, loading 
                         <strong>ℹ️ Auto-included:</strong> Program details, Student personal info, Address & Education summary tables.
                     </div>
 
-                    {/* Editable Footer Signature */}
+                    {/* Signature Selection */}
                     <div className="sal-mail-field sal-mail-full">
-                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                            Footer Signature
-                            <span style={{ fontSize: '0.65rem', color: '#9ca3af', fontWeight: 400 }}>(editable)</span>
-                        </label>
-                        <textarea rows={8} value={form.footer}
-                            onChange={e => setForm({ ...form, footer: e.target.value })}
-                            style={{ fontSize: '0.82rem', lineHeight: '1.5', color: '#4b5563' }}
-                            placeholder="Footer signature..." />
+                        <label>Select Template Signature</label>
+                        <select
+                            value={selectedSignatureId}
+                            onChange={(e) => setSelectedSignatureId(e.target.value)}
+                            disabled={isLoadingSignatures}
+                            style={{
+                                width: '100%', padding: '0.5rem 0.75rem',
+                                border: '1px solid #e2e8f0', borderRadius: '0.375rem',
+                                fontSize: '0.875rem', color: '#374151',
+                                backgroundColor: isLoadingSignatures ? '#f3f4f6' : 'white'
+                            }}
+                        >
+                            <option value="default">Default System Signature</option>
+                            {mailSignatures.map(sig => (
+                                <option key={sig._id} value={sig._id}>
+                                    {sig.name}
+                                </option>
+                            ))}
+                        </select>
+                        {isLoadingSignatures && <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: '4px' }}>Loading signatures...</p>}
                     </div>
 
                     {/* Document Attachments */}
@@ -353,14 +414,14 @@ const PaymentModal = ({ isOpen, onClose, onSave, loading }) => {
         <div className="sal-modal-overlay" onClick={onClose}>
             <div className="sal-modal sal-modal-wide" onClick={e => e.stopPropagation()}>
                 <div className="sal-modal-header" style={{ background: 'linear-gradient(135deg, #059669, #10b981)', color: 'white', border: 'none' }}>
-                    <CreditCard size={20} />
-                    <h3>Record Payment</h3>
+                    <FileText size={20} />
+                    <h3>Upload Invoice</h3>
                     <button onClick={onClose} className="sal-modal-close" style={{ color: 'rgba(255,255,255,0.7)' }}><X size={18} /></button>
                 </div>
                 <div className="sal-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     {/* Payment Date */}
                     <div className="sal-mail-field">
-                        <label>Payment Date *</label>
+                        <label>Invoice Date *</label>
                         <input type="date" value={paymentDate}
                             onChange={e => setPaymentDate(e.target.value)}
                             style={{ padding: '0.5rem 0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.375rem', fontSize: '0.875rem' }} />
@@ -377,7 +438,7 @@ const PaymentModal = ({ isOpen, onClose, onSave, loading }) => {
 
                     {/* File Upload */}
                     <div className="sal-mail-docs">
-                        <h4><Upload size={16} /> Payment Proof (Invoice / Photo / PDF)</h4>
+                        <h4><Upload size={16} /> Invoice Proof (Photo / PDF)</h4>
                         <p style={{ fontSize: '0.72rem', color: '#9ca3af', marginBottom: '0.5rem' }}>Max 5 files • JPG, PNG, PDF • 10MB each</p>
                         <label style={{
                             display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
@@ -417,7 +478,7 @@ const PaymentModal = ({ isOpen, onClose, onSave, loading }) => {
                     <button onClick={handleSubmit} className="sal-btn-primary"
                         style={{ background: 'linear-gradient(135deg, #059669, #10b981)' }}
                         disabled={loading || !paymentDate}>
-                        {loading ? 'Saving...' : <><CreditCard size={16} /> Mark as Paid</>}
+                        {loading ? 'Saving...' : 'Upload Validation'}
                     </button>
                 </div>
             </div>
@@ -639,7 +700,7 @@ const StudentApplicationsList = () => {
                                 <th>Status</th>
                                 <th>Stage</th>
                                 <th>Payment Date</th>
-                                <th>Pay</th>
+                                <th>Invoice</th>
                                 <th>Send Mail</th>
                                 <th>Sent</th>
                                 <th>View</th>
@@ -675,14 +736,15 @@ const StudentApplicationsList = () => {
                                             }) : '—'}
                                         </td>
                                         <td>
-                                            {app.paymentStatus !== 'paid' ? (
+                                            <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center', justifyContent: 'center' }}>
+                                                {app.paymentStatus === 'paid' && (
+                                                    <span className="sal-badge sal-badge-emerald" style={{ fontSize: '0.72rem', cursor: 'default' }} title="Paid">✓</span>
+                                                )}
                                                 <button className="sal-mail-btn" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#a7f3d0' }}
                                                     onClick={() => setPayModal({ open: true, appId: app._id })}>
-                                                    <CreditCard size={15} /> Pay
+                                                    <Upload size={15} /> Upload
                                                 </button>
-                                            ) : (
-                                                <span className="sal-badge sal-badge-emerald" style={{ fontSize: '0.72rem' }}>✓ Paid</span>
-                                            )}
+                                            </div>
                                         </td>
                                         <td>
                                             <button className="sal-mail-btn"
