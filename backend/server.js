@@ -129,6 +129,7 @@ app.use('/api/external-search', require('./src/routes/externalApiRoutes'));
 app.use('/api/upload', require('./src/routes/uploadRoutes'));
 app.use('/api/countries', require('./src/routes/countryDetailRoutes'));
 app.use('/api/brochures', require('./src/routes/brochureRoutes'));
+app.use('/api/mail-signatures', require('./src/routes/mailSignatureRoutes'));
 
 // Serve static files
 const path = require('path');
