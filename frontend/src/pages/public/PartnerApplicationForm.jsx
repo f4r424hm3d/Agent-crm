@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 import { useToast } from '../../components/ui/toast';
+import { validatePartnerStep, validatePartnerFile } from '../../utils/validation/partner/partnerValidation';
 
 const PartnerApplicationForm = () => {
     const navigate = useNavigate();
@@ -48,6 +49,10 @@ const PartnerApplicationForm = () => {
         additionalInfo: '',
         termsAccepted: false,
         dataConsent: false,
+        countryCode: '+91',
+        alternateCountryCode: '+91',
+        latitude: '',
+        longitude: '',
         // Document uploads
         documents: {
             idProof: null,
@@ -68,11 +73,26 @@ const PartnerApplicationForm = () => {
     const [otp, setOtp] = useState('');
     const [isEmailVerified, setIsEmailVerified] = useState(false);
     const [otpSent, setOtpSent] = useState(false);
+    const [countries, setCountries] = useState([]);
+    const [isLoadingCountries, setIsLoadingCountries] = useState(false);
 
     const totalSteps = 6;
 
     const handleInputChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+        // Numeric only validation for phone fields
+        if (['phone', 'alternatePhone', 'pincode'].includes(field)) {
+            const numericValue = value.replace(/[^0-9]/g, '');
+            // Limit phone to 10 digits
+            if (['phone', 'alternatePhone'].includes(field) && numericValue.length > 10) return;
+            setFormData(prev => ({ ...prev, [field]: numericValue }));
+        } else if (['firstName', 'lastName', 'qualification', 'designation'].includes(field)) {
+            // Alphabets and spaces only for specific fields
+            const alphaValue = value.replace(/[^A-Za-z\s]/g, '');
+            setFormData(prev => ({ ...prev, [field]: alphaValue }));
+        } else {
+            setFormData(prev => ({ ...prev, [field]: value }));
+        }
+
         // Clear error when user types
         if (errors[field]) {
             setErrors(prev => ({ ...prev, [field]: null }));
@@ -88,23 +108,10 @@ const PartnerApplicationForm = () => {
             return;
         }
 
-        // Validate file type
-        const isPhoto = ['agentPhoto', 'companyPhoto'].includes(fieldName);
-        const allowedTypes = isPhoto
-            ? ['image/jpeg', 'image/jpg', 'image/png']
-            : ['application/pdf'];
-
-        if (!allowedTypes.includes(file.type)) {
-            const allowed = isPhoto ? 'JPG, JPEG, PNG' : 'PDF';
-            toast.error(`Invalid file type for ${fieldName.replace(/([A-Z])/g, ' $1').trim()}. Only ${allowed} files allowed.`);
-            return;
-        }
-
-        // Validate file size
-        const maxSize = isPhoto ? 2 * 1024 * 1024 : 5 * 1024 * 1024; // 2MB or 5MB
-        if (file.size > maxSize) {
-            const sizeLabel = isPhoto ? '2MB' : '5MB';
-            toast.error(`File size exceeds ${sizeLabel} limit for ${fieldName.replace(/([A-Z])/g, ' $1').trim()}`);
+        // Centralized file validation
+        const { isValid, error } = validatePartnerFile(fieldName, file);
+        if (!isValid) {
+            toast.error(error);
             return;
         }
 
@@ -171,66 +178,10 @@ const PartnerApplicationForm = () => {
     };
 
     const validateStep = (step) => {
-        const newErrors = {};
-        let isValid = true;
+        const { isValid, newErrors } = validatePartnerStep(step, formData, isEmailVerified);
 
-        if (step === 1) {
-            if (!formData.firstName) newErrors.firstName = "First Name is required";
-            if (!formData.lastName) newErrors.lastName = "Last Name is required";
-            if (!formData.email) newErrors.email = "Email is required";
-            if (!formData.phone) newErrors.phone = "Phone Number is required";
-            if (!formData.qualification) newErrors.qualification = "Qualification is required";
-            if (!formData.designation) newErrors.designation = "Designation is required";
-            if (!formData.experience) newErrors.experience = "Experience is required";
-            if (!isEmailVerified) newErrors.emailVerified = "Please verify your email";
-        }
-
-        if (step === 2) {
-            if (!formData.companyName) newErrors.companyName = "Company Name is required";
-            if (!formData.companyType) newErrors.companyType = "Company Type is required";
-
-            const currentYear = new Date().getFullYear();
-            const year = parseInt(formData.establishedYear);
-            if (!formData.establishedYear) {
-                newErrors.establishedYear = "Year Established is required";
-            } else if (!year || year > currentYear || year < 1900) {
-                newErrors.establishedYear = "Enter a valid year";
-            }
-
-            if (!formData.address) newErrors.address = "Address is required";
-            if (!formData.city) newErrors.city = "City is required";
-            if (!formData.state) newErrors.state = "State is required";
-            if (!formData.pincode) newErrors.pincode = "PIN Code is required";
-        }
-
-        if (step === 3) {
-            if (formData.specialization.length === 0) newErrors.specialization = "Select at least one specialization";
-            if (formData.servicesOffered.length === 0) newErrors.servicesOffered = "Select at least one service";
-            if (!formData.currentStudents) newErrors.currentStudents = "Student Base is required";
-            if (!formData.teamSize) newErrors.teamSize = "Team Size is required";
-        }
-
-        if (step === 4) {
-            if (!formData.partnershipType) newErrors.partnershipType = "Partnership Type is required";
-            if (!formData.expectedStudents) newErrors.expectedStudents = "Students Target is required";
-            if (!formData.whyPartner) newErrors.whyPartner = "This field is required";
-        }
-
-        if (step === 5) {
-            if (!formData.documents.idProof) newErrors.idProof = "ID Proof is required";
-            if (!formData.documents.companyLicence) newErrors.companyLicence = "Company Licence is required";
-            if (!formData.documents.agentPhoto) newErrors.agentPhoto = "Agent Photo is required";
-            if (!formData.documents.companyPhoto) newErrors.companyPhoto = "Company Photo is required";
-        }
-
-        if (step === 6) {
-            if (!formData.termsAccepted) newErrors.termsAccepted = "You must accept the terms";
-            if (!formData.dataConsent) newErrors.dataConsent = "You must provide data consent";
-        }
-
-        if (Object.keys(newErrors).length > 0) {
+        if (!isValid) {
             setErrors(newErrors);
-            isValid = false;
         } else {
             setErrors({});
         }
@@ -240,6 +191,7 @@ const PartnerApplicationForm = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isSubmitting) return;
 
         // Validate final step
         const { isValid, newErrors } = validateStep(6);
@@ -301,13 +253,21 @@ const PartnerApplicationForm = () => {
             const response = await apiClient.post('/inquiry/partner-application', submissionData);
             if (response.data && response.data.success) {
                 toast.success(response.data.message || 'Application submitted successfully!');
-                navigate('/');
+                navigate('/application-success');
             } else {
                 toast.error(response.data?.message || 'Submission failed.');
             }
         } catch (error) {
             console.error("Submission error:", error);
-            toast.error(error.response?.data?.message || 'Failed to submit application.');
+
+            // Handle 429 specifically
+            if (error.response?.status === 429) {
+                const errorMessage = error.response.data?.message || 'You have already submitted recently. Please wait a few minutes before trying again.';
+                toast.error(errorMessage, { duration: 6000 });
+            } else {
+                const msg = error.response?.data?.message || 'Failed to submit application. Please try again.';
+                toast.error(msg);
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -316,8 +276,9 @@ const PartnerApplicationForm = () => {
     const isStepValid = () => {
         switch (currentStep) {
             case 1:
+                const isPhoneValid = formData.phone && /^[0-9]{10}$/.test(formData.phone);
                 return formData.firstName && formData.lastName && formData.email &&
-                    formData.phone && formData.qualification && formData.designation &&
+                    isPhoneValid && formData.qualification && formData.designation &&
                     formData.experience && isEmailVerified;
             case 2:
                 const currentYear = new Date().getFullYear();
@@ -382,6 +343,23 @@ const PartnerApplicationForm = () => {
     useEffect(() => {
         window.scrollTo({ top: 0, left: 0, behavior: "smooth" });
     }, [currentStep]);
+
+    useEffect(() => {
+        const fetchCountries = async () => {
+            setIsLoadingCountries(true);
+            try {
+                const response = await apiClient.get('/countries');
+                if (response.data?.success) {
+                    setCountries(response.data.data);
+                }
+            } catch (error) {
+                console.error("Failed to fetch countries:", error);
+            } finally {
+                setIsLoadingCountries(false);
+            }
+        };
+        fetchCountries();
+    }, []);
 
     const states = [
         'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh', 'Delhi', 'Goa', 'Gujarat',
@@ -521,8 +499,22 @@ const PartnerApplicationForm = () => {
                                     )}
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Phone Number *</label>
-                                        <input type="tel" required value={formData.phone} onChange={(e) => handleInputChange('phone', e.target.value)}
-                                            className={`w-full px-4 py-3 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="+91 00000 00000" />
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={formData.countryCode}
+                                                onChange={(e) => handleInputChange('countryCode', e.target.value)}
+                                                className="w-24 px-2 py-3 bg-white border border-gray-300 rounded-lg text-sm outline-none"
+                                            >
+                                                {countries.map((c, i) => (
+                                                    <option key={`${c.code}-${i}`} value={`+${c.phone[0]}`}>
+                                                        {c.code} (+{c.phone[0]})
+                                                    </option>
+                                                ))}
+                                                {countries.length === 0 && <option value="+91">IN (+91)</option>}
+                                            </select>
+                                            <input type="tel" required value={formData.phone} onChange={(e) => handleInputChange('phone', e.target.value)}
+                                                className={`flex-1 px-4 py-3 bg-white border ${errors.phone ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all`} placeholder="00000 00000" />
+                                        </div>
                                         {errors.phone && <p className="text-red-500 text-xs mt-1">{errors.phone}</p>}
                                     </div>
                                 </div>
@@ -530,8 +522,22 @@ const PartnerApplicationForm = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Alternate Phone</label>
-                                        <input type="tel" value={formData.alternatePhone} onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
-                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="Optional" />
+                                        <div className="flex gap-2">
+                                            <select
+                                                value={formData.alternateCountryCode}
+                                                onChange={(e) => handleInputChange('alternateCountryCode', e.target.value)}
+                                                className="w-24 px-2 py-3 bg-white border border-gray-300 rounded-lg text-sm outline-none"
+                                            >
+                                                {countries.map((c, i) => (
+                                                    <option key={`alt-${c.code}-${i}`} value={`+${c.phone[0]}`}>
+                                                        {c.code} (+{c.phone[0]})
+                                                    </option>
+                                                ))}
+                                                {countries.length === 0 && <option value="+91">IN (+91)</option>}
+                                            </select>
+                                            <input type="tel" value={formData.alternatePhone} onChange={(e) => handleInputChange('alternatePhone', e.target.value)}
+                                                className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none transition-all" placeholder="Optional" />
+                                        </div>
                                     </div>
                                     <div className="space-y-1.5">
                                         <label className="text-sm font-semibold text-gray-700">Highest Qualification *</label>
@@ -650,6 +656,19 @@ const PartnerApplicationForm = () => {
                                         <input type="text" required pattern="[0-9]{6}" value={formData.pincode} onChange={(e) => handleInputChange('pincode', e.target.value)}
                                             className={`w-full px-4 py-3 bg-white border ${errors.pincode ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none`} placeholder="6-digit PIN" />
                                         {errors.pincode && <p className="text-red-500 text-xs mt-1">{errors.pincode}</p>}
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Latitude (Optional)</label>
+                                        <input type="number" step="any" value={formData.latitude} onChange={(e) => handleInputChange('latitude', e.target.value)}
+                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none" placeholder="e.g. 28.6139" />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-sm font-semibold text-gray-700">Longitude (Optional)</label>
+                                        <input type="number" step="any" value={formData.longitude} onChange={(e) => handleInputChange('longitude', e.target.value)}
+                                            className="w-full px-4 py-3 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 text-gray-900 outline-none" placeholder="e.g. 77.2090" />
                                     </div>
                                 </div>
                             </div>

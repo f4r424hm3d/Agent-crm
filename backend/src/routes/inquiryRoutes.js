@@ -25,4 +25,6 @@ router.post('/upload-agent-documents',
     InquiryController.uploadAgentDocuments
 );
 
+router.get('/application-status/:token', InquiryController.getApplicationStatus);
+
 module.exports = router;

@@ -49,6 +49,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [openDropdowns, setOpenDropdowns] = useState({});
   const [logoError, setLogoError] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
 
   useEffect(() => {
     const activeDropdowns = {};
@@ -230,25 +231,32 @@ const Sidebar = ({ isOpen, onClose }) => {
 
       {/* Sidebar */}
       <aside
+        onMouseEnter={() => window.innerWidth >= 768 && setIsHovered(true)}
+        onMouseLeave={() => {
+          setIsHovered(false);
+          // Optional: close dropdowns when leaving sidebar
+          // setOpenDropdowns({});
+        }}
         className={`
-          fixed top-0 left-0 h-screen bg-primary-600 text-white w-72 transform transition-transform duration-300 ease-in-out z-30
-          flex flex-col shadow-2xl
+          fixed top-0 left-0 h-screen bg-primary-600 text-white transform transition-all duration-300 ease-in-out z-[60]
+          flex flex-col shadow-2xl overflow-hidden
           ${isOpen ? "translate-x-0" : "-translate-x-full"}
           md:translate-x-0
+          ${isHovered ? "md:w-72" : "md:w-20"}
         `}
       >
         {/* Logo */}
-        <div className="h-20 flex items-center px-8 border-b border-primary-500/50 shrink-0">
+        <div className="h-20 flex items-center px-4 border-b border-primary-500/50 shrink-0 overflow-hidden justify-center md:justify-start">
           {logoLight && !logoError ? (
             <img
               src={logoLight}
               alt="Logo"
-              className="max-h-12 w-auto object-contain"
+              className={`max-h-12 w-auto object-contain transition-all duration-300 ${isHovered ? 'md:px-4' : 'md:scale-90 md:mx-auto'}`}
               onError={() => setLogoError(true)}
             />
           ) : (
-            <div className="flex items-center space-x-3">
-              <h1 style={styles["#custom-h1-class"]} className="text-xl font-black tracking-tight text-white uppercase">
+            <div className={`flex items-center space-x-3 transition-all duration-300 ${!isHovered ? 'md:opacity-0 md:w-0' : 'opacity-100 px-4'}`}>
+              <h1 style={styles["#custom-h1-class"]} className="text-xl font-black tracking-tight text-white uppercase whitespace-nowrap">
                 {settings?.platform_name}
               </h1>
             </div>
@@ -275,16 +283,20 @@ const Sidebar = ({ isOpen, onClose }) => {
                       `}
                     >
                       <div className="flex items-center">
-                        <item.icon size={22} className="mr-3 opacity-90" />
-                        <span className="text-sm tracking-wide">{item.label}</span>
+                        <item.icon size={22} className={`opacity-90 transition-all duration-300 mr-3 ${!isHovered ? 'md:mr-0 md:mx-auto' : ''}`} />
+                        <span className={`text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${!isHovered ? 'md:opacity-0 md:w-0 md:overflow-hidden' : 'opacity-100'}`}>
+                          {item.label}
+                        </span>
                       </div>
-                      {openDropdowns[item.label] ? (
-                        <FiChevronUp size={18} className="opacity-70" />
-                      ) : (
-                        <FiChevronDown size={18} className="opacity-70" />
-                      )}
+                      <div className={`transition-all duration-300 ${!isHovered ? 'md:opacity-0 md:w-0 md:overflow-hidden' : 'opacity-70'}`}>
+                        {openDropdowns[item.label] ? (
+                          <FiChevronUp size={18} />
+                        ) : (
+                          <FiChevronDown size={18} />
+                        )}
+                      </div>
                     </button>
-                    {openDropdowns[item.label] && (
+                    {openDropdowns[item.label] && (isHovered || window.innerWidth < 768) && (
                       <ul className="mt-2 ml-6 space-y-1 border-l-2 border-primary-500/50 pl-4">
                         {item.subItems.map((subItem) => (
                           <li key={subItem.label}>
@@ -313,8 +325,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                     }}
                     className="w-full flex items-center px-4 py-3 rounded-xl transition-all duration-200 text-primary-100 hover:bg-primary-500/50 hover:text-white group"
                   >
-                    <item.icon size={22} className="mr-3 opacity-90 group-hover:scale-110 transition-transform" />
-                    <span className="text-sm font-medium tracking-wide">{item.label}</span>
+                    <item.icon size={22} className={`opacity-90 transition-all duration-300 group-hover:scale-110 mr-3 ${!isHovered ? 'md:mr-0 md:mx-auto' : ''}`} />
+                    <span className={`text-sm font-medium tracking-wide transition-all duration-300 whitespace-nowrap ${!isHovered ? 'md:opacity-0 md:w-0 md:overflow-hidden' : 'opacity-100'}`}>
+                      {item.label}
+                    </span>
                   </button>
                 ) : (
                   <NavLink
@@ -327,8 +341,10 @@ const Sidebar = ({ isOpen, onClose }) => {
                     }
                     onClick={() => window.innerWidth < 1024 && onClose()}
                   >
-                    <item.icon size={22} className={`mr-3 transition-transform group-hover:scale-110 ${location.pathname === item.path ? 'opacity-100' : 'opacity-90'}`} />
-                    <span className="text-sm tracking-wide">{item.label}</span>
+                    <item.icon size={22} className={`transition-all duration-300 group-hover:scale-110 ${location.pathname === item.path ? 'opacity-100' : 'opacity-90'} mr-3 ${!isHovered ? 'md:mr-0 md:mx-auto' : ''}`} />
+                    <span className={`text-sm tracking-wide transition-all duration-300 whitespace-nowrap ${!isHovered ? 'md:opacity-0 md:w-0 md:overflow-hidden' : 'opacity-100'}`}>
+                      {item.label}
+                    </span>
                   </NavLink>
                 )}
               </li>
@@ -337,14 +353,14 @@ const Sidebar = ({ isOpen, onClose }) => {
         </nav>
 
         {/* User info */}
-        <div className="p-6 border-t border-primary-500/50 bg-primary-700/30">
-          <div className="flex items-center space-x-4">
-            <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10 shadow-inner">
+        <div className="p-4 border-t border-primary-500/50 bg-primary-700/30 overflow-hidden">
+          <div className="flex items-center">
+            <div className="h-12 w-12 rounded-2xl bg-white/10 flex items-center justify-center border border-white/10 shadow-inner shrink-0">
               <span className="text-lg font-black text-white">
                 {user?.name?.charAt(0).toUpperCase() || user?.email?.charAt(0).toUpperCase() || user?.role?.charAt(0) || 'U'}
               </span>
             </div>
-            <div className="flex-1 min-w-0">
+            <div className={`flex-1 min-w-0 transition-all duration-300 ${!isHovered ? 'md:opacity-0 md:w-0 md:overflow-hidden' : 'opacity-100 ml-4'}`}>
               <p className="text-sm font-bold text-white truncate">{user?.name || user?.email || 'User'}</p>
               <p className="text-[10px] uppercase font-black tracking-widest text-primary-200 opacity-70 truncate">
                 {user?.role?.replace("_", " ")}

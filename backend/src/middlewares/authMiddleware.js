@@ -45,6 +45,18 @@ const authMiddleware = async (req, res, next) => {
       return res.status(403).json({
         success: false,
         message: 'Account is inactive',
+        reason: 'ACCOUNT_INACTIVE',
+        role: decoded.role
+      });
+    }
+
+    // Check login permission for Agents
+    if (decoded.role === 'AGENT' && user.canLogin === false) {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Your login permission has been revoked.',
+        reason: 'PERMISSION_REVOKED',
+        role: 'AGENT'
       });
     }
 

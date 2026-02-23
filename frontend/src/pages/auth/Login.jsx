@@ -14,7 +14,7 @@ import Alert from "../../components/common/Alert";
 import { ROLES } from "../../utils/constants";
 import { selectSettings } from "../../store/slices/settingsSlice";
 import { useToast } from "../../components/ui/toast";
-import { Mail, Lock, UserCircle, ArrowLeft, ShieldCheck, ChevronRight } from "lucide-react";
+import { Mail, Lock, UserCircle, ArrowLeft, ShieldCheck, ChevronRight, Home } from "lucide-react";
 
 const Login = () => {
   const dispatch = useDispatch();
@@ -30,6 +30,27 @@ const Login = () => {
     password: "",
     role: initialRole,
   });
+  const [logoutNotice, setLogoutNotice] = useState(null);
+
+  // Check for logout reason (e.g., account disabled)
+  useEffect(() => {
+    const reason = localStorage.getItem('logoutReason');
+    if (reason) {
+      if (reason === 'PERMISSION_REVOKED') {
+        setLogoutNotice("Your account access has been disabled by admin.");
+      } else if (reason === 'ACCOUNT_INACTIVE') {
+        setLogoutNotice("Your account is currently inactive. Please contact support.");
+      }
+      localStorage.removeItem('logoutReason');
+    }
+  }, []);
+
+  // Redirect if no role is provided
+  useEffect(() => {
+    if (!initialRole) {
+      navigate("/");
+    }
+  }, [initialRole, navigate]);
 
   // Sync role if query parameter changes
   useEffect(() => {
@@ -109,31 +130,10 @@ const Login = () => {
               </p>
             </div>
 
+            {logoutNotice && <Alert type="warning" message={logoutNotice} className="mb-6 rounded-2xl animate-shake" />}
             {error && <Alert type="error" message={error} className="mb-6 rounded-2xl animate-shake" />}
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              {/* Only show role selection if NOT provided in URL */}
-              {!initialRole && (
-                <div className="space-y-1.5">
-                  <label className="block text-sm font-bold text-gray-700 ml-1">Login As</label>
-                  <div className="relative group">
-                    <UserCircle className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 group-focus-within:text-primary-500 transition-colors" size={20} />
-                    <select
-                      name="role"
-                      value={formData.role}
-                      onChange={handleChange}
-                      required
-                      className="w-full pl-12 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 focus:bg-white transition-all outline-none appearance-none font-medium text-gray-700 hover:border-gray-300"
-                    >
-                      <option value="">Select your role</option>
-                      {roleOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              )}
-
               <div className="space-y-1.5">
                 <label className="block text-sm font-bold text-gray-700 ml-1">Email Address</label>
                 <div className="relative group">
@@ -191,26 +191,22 @@ const Login = () => {
             </form>
 
             <div className="mt-8 pt-6 border-t border-gray-100">
-              {initialRole ? (
-                <div className="text-center">
-                  <button
-                    onClick={() => navigate('/')}
-                    className="inline-flex items-center text-sm font-bold text-gray-500 hover:text-primary-600 transition-colors group"
-                  >
-                    <ArrowLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />
-                    Not a {currentRoleLabel}? Change Role
-                  </button>
-                </div>
-              ) : (
-                <div className="text-center space-y-3">
-                  <p className="text-sm text-gray-500 font-medium">New to the Portal?</p>
-                  <div className="flex justify-center">
-                    <Link to="/agent-register" className="text-sm font-bold text-primary-600 hover:text-primary-700 px-6 py-3 bg-primary-50 rounded-xl transition-colors w-full sm:w-auto text-center">
-                      Agent Registration
-                    </Link>
-                  </div>
-                </div>
-              )}
+
+              <div className="text-center">
+                <button
+                  onClick={() => navigate('/')}
+                  className="cursor-pointer text-sm font-bold text-gray-500 hover:text-primary-600 transition-colors group"
+                >
+                  Not a {currentRoleLabel}? Change Role
+                </button>
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <Link to="/" className="cursor-pointer inline-flex items-center text-sm font-bold text-gray-400 hover:text-primary-600 transition-colors group">
+                  <Home size={16} className="mr-2" />
+                  Home
+                </Link>
+              </div>
             </div>
           </div>
         </div>

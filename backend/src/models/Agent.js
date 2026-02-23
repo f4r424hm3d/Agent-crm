@@ -14,6 +14,12 @@ const agentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  agentCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true
+  },
 
   // Personal Information
   firstName: {
@@ -30,7 +36,15 @@ const agentSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  countryCode: {
+    type: String,
+    trim: true
+  },
   alternatePhone: String,
+  alternateCountryCode: {
+    type: String,
+    trim: true
+  },
   designation: String,
   experience: String,
   qualification: String,
@@ -57,6 +71,16 @@ const agentSchema = new mongoose.Schema({
   country: {
     type: String,
     default: 'India'
+  },
+  latitude: {
+    type: Number,
+    min: -90,
+    max: 90
+  },
+  longitude: {
+    type: Number,
+    min: -180,
+    max: 180
   },
 
   // Specialization & Services
@@ -119,6 +143,10 @@ const agentSchema = new mongoose.Schema({
   },
   approvedAt: Date,
   declinedAt: Date,
+  canLogin: {
+    type: Boolean,
+    default: true
+  },
   lastLogin: Date,
 
   // Tracking Fields
@@ -137,6 +165,14 @@ const agentSchema = new mongoose.Schema({
   passwordResetOTPExpires: Date,
   passwordResetToken: String,
   passwordResetExpires: Date,
+
+  // Application Tracking
+  trackingToken: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  trackingTokenExpires: Date,
 
 
 
@@ -204,7 +240,11 @@ agentSchema.methods.toJSON = function () {
 
 // Virtual for full name
 agentSchema.virtual('fullName').get(function () {
-  return `${this.firstName} ${this.lastName}`;
+  return `${this.firstName || ''} ${this.lastName || ''}`.trim();
 });
+
+// Ensure virtuals are included in toJSON
+agentSchema.set('toJSON', { virtuals: true });
+agentSchema.set('toObject', { virtuals: true });
 
 module.exports = mongoose.model('Agent', agentSchema);

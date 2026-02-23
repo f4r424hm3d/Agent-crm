@@ -46,10 +46,10 @@ const SetupPassword = () => {
             setSuccess(true);
             showSuccess(response.data.message || 'Password set successfully!');
 
-            // Redirect to login after 2 seconds
+            // Redirect to login after 3 seconds
             setTimeout(() => {
                 navigate('/login');
-            }, 2000);
+            }, 3000);
         } catch (error) {
             console.error('Setup password error:', error);
             const msg = error.response?.data?.message || 'Failed to setup password';

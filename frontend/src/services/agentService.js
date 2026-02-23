@@ -28,7 +28,7 @@ export const agentService = {
   // Update agent
   updateAgent: async (id, data) => {
     const response = await apiClient.put(`/agents/${id}`, data);
-    return response.data;
+    return response.data.data || response.data;
   },
 
   // Get dashboard statistics
@@ -61,17 +61,6 @@ export const agentService = {
     return response.data.data || response.data;
   },
 
-  // Update agent
-  updateAgent: async (id, data) => {
-    const response = await apiClient.put(`/agents/${id}`, data);
-    return response.data.data || response.data;
-  },
-
-  // Delete agent
-  deleteAgent: async (id) => {
-    const response = await apiClient.delete(`/agents/${id}`);
-    return response.data.data || response.data;
-  },
 
   // Upload document
   uploadDocument: async (id, formData) => {
@@ -108,6 +97,12 @@ export const agentService = {
   // Delete document
   deleteDocument: async (id, documentName) => {
     const response = await apiClient.delete(`/agents/${id}/documents/${documentName}`);
+    return response.data;
+  },
+
+  // Toggle login permission
+  toggleLoginPermission: async (id, canLogin) => {
+    const response = await apiClient.patch(`/agents/${id}/toggle-permission`, { canLogin });
     return response.data;
   },
 };

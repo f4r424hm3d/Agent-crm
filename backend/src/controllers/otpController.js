@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const EmailVerification = require('../models/EmailVerification');
-const { sendOTPEmail } = require('../utils/emailService');
+const emailService = require('../services/emailService');
 
 /**
  * Generate 6-digit OTP
@@ -57,7 +57,7 @@ exports.sendOTP = async (req, res) => {
         });
 
         // Send email
-        await sendOTPEmail(emailLower, otp, expiryMinutes);
+        await emailService.sendVerificationOTP(emailLower, otp);
 
         res.status(200).json({
             success: true,
@@ -208,7 +208,7 @@ exports.resendOTP = async (req, res) => {
         });
 
         // Send email
-        await sendOTPEmail(emailLower, otp, expiryMinutes);
+        await emailService.sendVerificationOTP(emailLower, otp);
 
         res.status(200).json({
             success: true,
