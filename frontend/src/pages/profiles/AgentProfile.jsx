@@ -308,6 +308,11 @@ const AgentProfile = () => {
                     Back
                 </button>
                 <div className="flex items-center gap-3">
+                    {agentData?.agentCode && (
+                        <span className="px-3 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-black">
+                            ID: {agentData.agentCode}
+                        </span>
+                    )}
                     <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(agentData?.approvalStatus)}`}>
                         {agentData?.approvalStatus === 'approved' && <CheckCircle2 className="w-3 h-3" />}
                         {agentData?.approvalStatus === 'pending' && <Clock className="w-3 h-3" />}
@@ -507,6 +512,15 @@ const AgentProfile = () => {
                         />
                         <div className="p-8">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
+                                <div className="md:col-span-2">
+                                    <DataField
+                                        label="Agent ID"
+                                        value={agentData.agentCode}
+                                        isEditing={false}
+                                        disabled={true}
+                                        mono={true}
+                                    />
+                                </div>
                                 <DataField
                                     label="First Name"
                                     value={editMode.overview ? editData.firstName : agentData.firstName}

@@ -5,6 +5,7 @@ const AuditService = require('../services/auditService');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
 const { AGENT_APPROVAL_STATUS } = require('../utils/constants');
+const { generateAgentCode } = require('../utils/agentCodeGenerator');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 
@@ -25,6 +26,7 @@ class AgentController {
 
       if (search) {
         query.$or = [
+          { agentCode: { $regex: search, $options: 'i' } },
           { firstName: { $regex: search, $options: 'i' } },
           { lastName: { $regex: search, $options: 'i' } },
           { email: { $regex: search, $options: 'i' } },
@@ -41,7 +43,30 @@ class AgentController {
 
       const count = await Agent.countDocuments(query);
 
-      return ResponseHandler.paginated(res, 'Agents retrieved successfully', agents, {
+      // Add activity status based on applications in last 30 days
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+      const agentsWithActivity = await Promise.all(
+        agents.map(async (agent) => {
+          const appCount = await Application.countDocuments({
+            recruitmentAgentId: agent._id,
+            createdAt: { $gte: thirtyDaysAgo }
+          });
+
+          let activityStatus = 'Inactive';
+          if (appCount >= 5) activityStatus = 'Active';
+          else if (appCount >= 2) activityStatus = 'Moderate';
+
+          return {
+            ...agent.toObject(),
+            activityStatus,
+            applicationCount30Days: appCount
+          };
+        })
+      );
+
+      return ResponseHandler.paginated(res, 'Agents retrieved successfully', agentsWithActivity, {
         page: parseInt(page),
         limit: parseInt(limit),
         totalItems: count,
@@ -49,6 +74,44 @@ class AgentController {
     } catch (error) {
       logger.error('Get agents error', { error: error.message });
       return ResponseHandler.serverError(res, 'Failed to get agents', error);
+    }
+  }
+
+  /**
+   * Toggle agent login permission
+   * PATCH /api/agents/:id/toggle-permission
+   */
+  static async toggleLoginPermission(req, res) {
+    try {
+      const { id } = req.params;
+      const { canLogin } = req.body;
+
+      if (typeof canLogin !== 'boolean') {
+        return ResponseHandler.badRequest(res, 'canLogin must be a boolean');
+      }
+
+      const agent = await Agent.findByIdAndUpdate(
+        id,
+        { canLogin },
+        { new: true }
+      ).select('-password');
+
+      if (!agent) {
+        return ResponseHandler.notFound(res, 'Agent not found');
+      }
+
+      // Log audit
+      await AuditService.logUpdate(req.user, 'Agent', agent._id,
+        { canLogin: !canLogin },
+        { canLogin },
+        req
+      );
+
+      return ResponseHandler.success(res, `Login permission ${canLogin ? 'enabled' : 'disabled'} for ${agent.firstName}`, agent);
+    } catch (error) {
+      console.error('Toggle permission error:', error);
+      logger.error('Toggle permission error', { error: error.message });
+      return ResponseHandler.serverError(res, 'Failed to toggle permission', error);
     }
   }
 
@@ -81,12 +144,10 @@ class AgentController {
    */
   static async createAgent(req, res) {
     try {
-      // 1. Get data from request
       const {
-        firstName, lastName, name, email, phone, company_name, companyName
+        firstName, lastName, email, phone, company_name, companyName
       } = req.body;
 
-      const finalName = name || `${firstName} ${lastName}`;
       const finalCompanyName = company_name || companyName;
 
       // 2. Check if email exists
@@ -96,49 +157,46 @@ class AgentController {
       }
 
       // 3. Generate password setup token
-      const { generateToken } = require('../utils/otpGenerator');
-      const setupToken = generateToken();
+      const setupToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(setupToken).digest('hex');
+      const setupTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      // 4. Create temporary password (will need to be changed)
-      const tempPassword = crypto.randomBytes(16).toString('hex');
+      // 4. Generate unique agentCode
+      const agentCode = await generateAgentCode();
 
-      // 5. Save to DB with password setup token
+      // 5. Create agent
       const agentData = {
         ...req.body,
-        // Overrides
-        name: finalName,
-        company_name: finalCompanyName,
-        password: tempPassword, // Temporary password
+        agentCode,
+        firstName,
+        lastName,
+        email,
+        phone,
+        companyName: finalCompanyName,
+        password: crypto.randomBytes(16).toString('hex'), // Temporary password
+        passwordSetupToken: hashedToken,
+        passwordSetupExpires: setupTokenExpires,
         isPasswordSet: false,
-        passwordSetupToken: setupToken,
-        passwordSetupExpires: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
         status: 'active',
         approvalStatus: 'approved',
         approvedAt: new Date(),
+        approvedBy: req.userId
       };
 
-      const agent = new Agent(agentData);
-      await agent.save();
+      const agent = await Agent.create(agentData);
 
       // 6. Send Password Setup Email
-      const tempAgent = {
-        firstName: firstName || name?.split(' ')[0] || 'Partner',
-        name: finalName,
-        email: email,
-        companyName: finalCompanyName
-      };
-
       // Fire and forget email (with logging)
-      emailService.sendPasswordSetupEmail(tempAgent, setupToken)
+      emailService.sendPasswordSetupEmail(agent, setupToken)
         .catch(emailError => {
           logger.error('Failed to send password setup email (Background)', { error: emailError.message, agentId: agent._id });
         });
 
-      // 6. Log audit
+      // 7. Log audit
       await AuditService.logCreate(req.user, 'Agent', agent._id, {
-        agentName: agent.name,
+        agentName: `${firstName} ${lastName}`,
         email: agent.email,
-        companyName: agent.company_name
+        companyName: agent.companyName
       }, req);
 
       return ResponseHandler.created(res, 'Agent created successfully. Password setup link sent via email.', { agent });
@@ -166,7 +224,7 @@ class AgentController {
 
       // Define allowed fields to update (prevent updating sensitive fields like password, _id, etc.)
       const allowedFields = [
-        'firstName', 'lastName', 'phone', 'alternatePhone', 'designation',
+        'firstName', 'lastName', 'email', 'phone', 'alternatePhone', 'designation',
         'experience', 'qualification', 'companyName', 'companyType',
         'registrationNumber', 'establishedYear', 'website', 'address',
         'city', 'state', 'pincode', 'country', 'specialization',
@@ -327,15 +385,15 @@ class AgentController {
         return ResponseHandler.badRequest(res, 'Agent is already approved');
       }
 
-      // 1. Generate password reset token (expires in 24 hours)
-      const resetToken = crypto.randomBytes(32).toString('hex');
-      const hashedToken = crypto.createHash('sha256').update(resetToken).digest('hex');
-      const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      // 2. Clean up invalid documents (filter out empty/incomplete documents)
-      if (agent.documents && Array.isArray(agent.documents)) {
-        agent.documents = agent.documents.filter(doc => doc && doc.url && doc.documentType);
+      // 1. Generate unique agentCode if not already assigned
+      if (!agent.agentCode) {
+        agent.agentCode = await generateAgentCode();
       }
+
+      // 2. Generate secure password setup token (expires in 24 hours)
+      const setupToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(setupToken).digest('hex');
+      const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
       // 3. Update agent status (instant approval)
       agent.approvalStatus = 'approved';
@@ -343,8 +401,9 @@ class AgentController {
       agent.approvedAt = new Date();
       agent.approvedBy = req.user.id;
       agent.approvalReason = notes;
-      agent.passwordSetupToken = resetToken; // Use plain token (not hashed) for email
+      agent.passwordSetupToken = hashedToken;
       agent.passwordSetupExpires = tokenExpires;
+      agent.isPasswordSet = false; // Ensure they must set it
 
       await agent.save();
 
@@ -364,7 +423,7 @@ class AgentController {
         while (attempt < maxRetries && !emailSent) {
           attempt++;
           try {
-            await emailService.sendPasswordSetupEmail(agent, resetToken);
+            await emailService.sendPasswordSetupEmail(agent, setupToken);
             logger.info('Password setup email sent successfully (Background)', {
               agentId: agent._id,
               email: agent.email,
@@ -765,7 +824,7 @@ class AgentController {
 
         // Use storage service to move file
         // Pass fieldName as documentKey to format filename as 'idProof.pdf' etc.
-        const relativePath = moveFileToAgentFolder(file, agent, fieldName);
+        const relativePath = moveFileToEntityFolder(file, agent, fieldName, 'agents');
 
         // Update agent document map
         if (!agent.documents) agent.documents = new Map();

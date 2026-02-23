@@ -194,4 +194,16 @@ router.delete(
   AgentController.deleteDocument
 );
 
+/**
+ * @route   PATCH /api/agents/:id/toggle-permission
+ * @desc    Toggle agent login permission
+ * @access  Private (Admin, Super Admin)
+ */
+router.patch(
+  '/:id/toggle-permission',
+  authMiddleware,
+  roleMiddleware(roles.ALL_ADMINS),
+  AgentController.toggleLoginPermission
+);
+
 module.exports = router;

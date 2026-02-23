@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import agentService from '../../services/agentService';
 import externalSearchService from '../../services/externalSearchService';
 import {
-  Building, Globe, Check, Save, Loader2, Shield, Search, Star, ShieldAlert, ShieldCheck, Plus, ChevronRight
+  Building, Globe, Check, Save, Loader2, Shield, Search, Star, ShieldAlert, ShieldCheck, Plus, ChevronRight, MapPin, Mail, Phone, Lock, Unlock, Settings
 } from 'lucide-react';
 import PageHeader from '../../components/layout/PageHeader';
 import {
@@ -67,6 +67,9 @@ const AgentList = () => {
     isOpen: false,
     agent: null
   });
+
+  // Permissions Confirmation State
+  const [permissionConfirm, setPermissionConfirm] = useState(null);
 
   // Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -205,6 +208,19 @@ const AgentList = () => {
     }
   };
 
+  const handleTogglePermission = async () => {
+    if (!permissionConfirm) return;
+    const { id, canLogin, firstName } = permissionConfirm;
+    try {
+      await agentService.toggleLoginPermission(id, canLogin);
+      toast.success(`Login permission ${canLogin ? 'enabled' : 'disabled'} successfully for ${firstName}`);
+      setPermissionConfirm(null);
+      fetchAgents(pagination.page);
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Failed to update permission');
+    }
+  };
+
   const handleDelete = async () => {
     if (!deleteConfirm) return;
 
@@ -286,12 +302,11 @@ const AgentList = () => {
             <table className="min-w-full divide-y divide-gray-200">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Company</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">Agent ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent Profile</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider text-center">Permission</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Activity Status</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Country & University</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -299,33 +314,62 @@ const AgentList = () => {
               <tbody className="bg-white divide-y divide-gray-200">
                 {agents.map((agent, index) => (
                   <tr key={agent._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      #{(pagination.page - 1) * pagination.limit + index + 1}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-blue-600">
+                      {agent.agentCode || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {agent.firstName} {agent.lastName}
+                      <div className="flex flex-col gap-1">
+                        <div className="text-sm font-bold text-gray-900">
+                          {agent.firstName} {agent.lastName}
+                        </div>
+                        <div className="text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded w-fit capitalize">
+                          {agent.companyName}
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-gray-500 font-medium">
+                          <MapPin size={12} className="text-gray-400" />
+                          {agent.city}, {agent.state}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{agent.companyName}</div>
-                      <div className="text-xs text-gray-500">{agent.companyType}</div>
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-1.5 text-sm text-gray-700">
+                          <Mail size={14} className="text-gray-400" />
+                          <span>{agent.email}</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                          <Phone size={14} className="text-gray-400" />
+                          <span>{agent.phone}</span>
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{agent.email}</div>
-                      <div className="text-xs text-gray-500">{agent.phone}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {agent.city}, {agent.state}
+                    <td className="px-6 py-4 whitespace-nowrap text-center">
+                      <button
+                        onClick={() => setPermissionConfirm({
+                          id: agent._id,
+                          canLogin: !(agent.canLogin !== false),
+                          firstName: agent.firstName,
+                          lastName: agent.lastName
+                        })}
+                        className={`cursor-pointer p-2 rounded-lg transition-all border ${agent.canLogin === false
+                          ? 'bg-red-50 text-red-600 border-red-100 ring-offset-2 focus:ring-2 focus:ring-red-200'
+                          : 'bg-green-50 text-green-600 border-green-100 ring-offset-2 focus:ring-2 focus:ring-green-200'
+                          }`}
+                        title={agent.canLogin === false ? "Enable Login Access" : "Disable Login Access"}
+                      >
+                        {agent.canLogin === false ? <Lock size={16} /> : <Unlock size={16} />}
+                      </button>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${agent.status === 'active'
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
+                        className={`px-3 py-1 inline-flex text-xs leading-5 font-bold rounded-full border ${agent.activityStatus === 'Active'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
+                          : agent.activityStatus === 'Moderate'
+                            ? 'bg-amber-50 text-amber-700 border-amber-100'
+                            : 'bg-gray-50 text-gray-600 border-gray-100'
                           }`}
                       >
-                        {agent.status}
+                        {agent.activityStatus || 'Inactive'}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -367,15 +411,6 @@ const AgentList = () => {
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => navigate(`/agents/edit/${agent._id}`)}
-                          className="text-blue-600 hover:text-blue-900 cursor-pointer"
-                          title="Edit Agent"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                           </svg>
                         </button>
                         <button
@@ -729,6 +764,48 @@ const AgentList = () => {
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Login Permission Confirmation AlertDialog */}
+      <AlertDialog open={!!permissionConfirm} onOpenChange={() => setPermissionConfirm(null)}>
+        <AlertDialogContent className="bg-white border-none shadow-2xl rounded-2xl p-0 overflow-hidden max-w-md">
+          <div className={`h-2 w-full ${permissionConfirm?.canLogin ? 'bg-emerald-500' : 'bg-red-500'}`} />
+          <div className="p-6">
+            <AlertDialogHeader>
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-xl ${permissionConfirm?.canLogin ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-600'}`}>
+                  {permissionConfirm?.canLogin ? <Unlock size={20} /> : <Lock size={20} />}
+                </div>
+                <AlertDialogTitle className="text-xl font-bold text-gray-900">
+                  {permissionConfirm?.canLogin ? 'Enable Login Access?' : 'Disable Login Access?'}
+                </AlertDialogTitle>
+              </div>
+              <AlertDialogDescription className="text-gray-600 text-sm leading-relaxed">
+                Are you sure you want to <strong>{permissionConfirm?.canLogin ? 'enable' : 'disable'}</strong> login access for{' '}
+                <span className="text-gray-900 font-bold">{permissionConfirm?.firstName} {permissionConfirm?.lastName}</span>?
+                {permissionConfirm?.canLogin === false && (
+                  <p className="mt-2 text-red-600 font-medium bg-red-50 p-3 rounded-lg border border-red-100 text-xs">
+                    This will immediately prevent the agent from accessing their dashboard.
+                  </p>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="mt-8 gap-3">
+              <AlertDialogCancel className="flex-1 py-2.5 rounded-xl border-gray-200 text-gray-500 font-bold hover:bg-gray-50 transition-all">
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleTogglePermission}
+                className={`flex-1 py-2.5 rounded-xl text-white font-bold transition-all shadow-lg ${permissionConfirm?.canLogin
+                  ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100'
+                  : 'bg-red-600 hover:bg-red-700 shadow-red-100'
+                  }`}
+              >
+                Confirm
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </div>
         </AlertDialogContent>
       </AlertDialog>
 

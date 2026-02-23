@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '../../components/ui/toast';
 import apiClient from '../../services/apiClient';
+import { validateRegisterStep } from '../../utils/validation/partner/partnerValidation';
 
 const RegisterAgent = () => {
   const navigate = useNavigate();
@@ -16,7 +17,8 @@ const RegisterAgent = () => {
 
   const [formData, setFormData] = useState({
     // Personal
-    name: '',
+    firstName: '',
+    lastName: '',
     email: '',
     phone: '',
     password: '',
@@ -94,44 +96,17 @@ const RegisterAgent = () => {
   };
 
   const isStepValid = () => {
-    switch (currentStep) {
-      case 1: // Account
-        return formData.name && formData.email && formData.phone &&
-          formData.password && formData.confirmPassword &&
-          formData.password === formData.confirmPassword &&
-          formData.password.length >= 6;
-      case 2: // Company
-        return formData.company_name && formData.registration_number &&
-          formData.website && formData.company_address &&
-          formData.city && formData.country;
-      case 3: // Professional (Experience + Desc)
-        // Mapping admin fields to backend expected fields
-        // Backend: years_of_experience, description
-        return formData.years_of_experience && formData.description;
-      case 4: // Bank Details (Backend requires these?)
-        // Backend authController: bank_name, account_number...
-        // User said "Public Registration -> All fields... strictly required".
-        return formData.bank_name && formData.account_number &&
-          formData.account_holder_name && formData.ifsc_code;
-      case 5: // Documents
-        return Object.values(formData.documents).every(doc => doc !== null);
-      case 6: // Review
-        return true;
-      default:
-        return false;
-    }
+    const { isValid, error } = validateRegisterStep(currentStep, formData);
+    return { isValid, error };
   };
 
   const nextStep = () => {
-    if (currentStep < totalSteps && isStepValid()) {
+    const { isValid, error } = isStepValid();
+    if (currentStep < totalSteps && isValid) {
       setCurrentStep(prev => prev + 1);
       window.scrollTo(0, 0);
-    } else if (!isStepValid()) {
-      if (currentStep === 1 && formData.password !== formData.confirmPassword) {
-        toast.error("Passwords do not match");
-      } else {
-        toast.error("Please fill all required fields");
-      }
+    } else if (!isValid) {
+      toast.error(error || "Please fill all required fields");
     }
   };
 
@@ -144,6 +119,17 @@ const RegisterAgent = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (isSubmitting) return;
+
+    // Validate final step (Step 5 documents, Step 6 is just review)
+    // Actually totalSteps is 6. Step 5 is docs.
+    const { isValid, error } = validateRegisterStep(5, formData);
+    if (!isValid) {
+      toast.error(error || "Please upload all required documents");
+      setCurrentStep(5);
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -214,8 +200,8 @@ const RegisterAgent = () => {
               return (
                 <div key={step.id} className="relative z-10 flex flex-col items-center">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 ${currentStep === step.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-lg scale-110' :
-                      currentStep > step.id ? 'bg-emerald-500 border-emerald-500 text-white' :
-                        'bg-white border-gray-300 text-gray-400'
+                    currentStep > step.id ? 'bg-emerald-500 border-emerald-500 text-white' :
+                      'bg-white border-gray-300 text-gray-400'
                     }`}>
                     {currentStep > step.id ? <CheckCircle2 size={20} /> : <StepIcon size={18} />}
                   </div>
@@ -240,20 +226,27 @@ const RegisterAgent = () => {
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <label className="text-sm font-semibold text-gray-700">Full Name *</label>
+                    <label className="text-sm font-semibold text-gray-700">First Name *</label>
                     <input type="text" required className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                      placeholder="Your Name" value={formData.name} onChange={e => handleInputChange('name', e.target.value)} />
+                      placeholder="First Name" value={formData.firstName} onChange={e => handleInputChange('firstName', e.target.value)} />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700">Last Name *</label>
+                    <input type="text" required className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      placeholder="Last Name" value={formData.lastName} onChange={e => handleInputChange('lastName', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <label className="text-sm font-semibold text-gray-700">Mobile Number *</label>
                     <input type="tel" required className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
                       placeholder="+91 99999 99999" value={formData.phone} onChange={e => handleInputChange('phone', e.target.value)} />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-semibold text-gray-700">Email Address *</label>
-                  <input type="email" required className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
-                    placeholder="you@company.com" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700">Email Address *</label>
+                    <input type="email" required className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 outline-none transition-all"
+                      placeholder="you@company.com" value={formData.email} onChange={e => handleInputChange('email', e.target.value)} />
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="space-y-2">
@@ -440,7 +433,7 @@ const RegisterAgent = () => {
                   <div className="bg-white p-4 rounded-lg border border-gray-200">
                     <h3 className="font-semibold text-gray-900 border-b pb-2 mb-2">Personal & Account</h3>
                     <div className="grid grid-cols-2 gap-2 text-sm">
-                      <span className="text-gray-500">Name:</span> <span className="font-medium">{formData.name}</span>
+                      <span className="text-gray-500">Name:</span> <span className="font-medium">{formData.firstName} {formData.lastName}</span>
                       <span className="text-gray-500">Email:</span> <span className="font-medium">{formData.email}</span>
                       <span className="text-gray-500">Phone:</span> <span className="font-medium">{formData.phone}</span>
                     </div>

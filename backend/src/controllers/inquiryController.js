@@ -48,8 +48,33 @@ class InquiryController {
                 additionalInfo,
                 termsAccepted,
                 dataConsent,
+                latitude,
+                longitude,
                 documents // Expecting array of objects
             } = req.body;
+
+            // 0. Validation for Qualification and Designation (Alphabets and spaces only)
+            const alphaRegex = /^[A-Za-z\s]+$/;
+            if (qualification && !alphaRegex.test(qualification)) {
+                return ResponseHandler.badRequest(res, 'Qualification can only contain alphabet characters and spaces.');
+            }
+            if (designation && !alphaRegex.test(designation)) {
+                return ResponseHandler.badRequest(res, 'Designation can only contain alphabet characters and spaces.');
+            }
+
+            // Optional coordinate validation
+            if (latitude && (isNaN(latitude) || latitude < -90 || latitude > 90)) {
+                return ResponseHandler.badRequest(res, 'Invalid latitude value.');
+            }
+            if (longitude && (isNaN(longitude) || longitude < -180 || longitude > 180)) {
+                return ResponseHandler.badRequest(res, 'Invalid longitude value.');
+            }
+
+            // Phone Validation (Strict 10 digits, numeric only)
+            const phoneRegex = /^[0-9]{10}$/;
+            if (!phoneRegex.test(phone)) {
+                return ResponseHandler.badRequest(res, 'Phone number must be exactly 10 digits and contain only numbers.');
+            }
 
             // 1. Capture tracking info
             const ipAddress = req.ip || req.headers['x-forwarded-for'] || req.connection.remoteAddress;
@@ -57,16 +82,19 @@ class InquiryController {
             // Simple OS detection from user-agent could be added here or passed from frontend
             const os = req.body.os || 'Unknown';
 
-            // 2. Prevent duplicate requests from same IP/Browser within a short timeframe (Optional but recommended)
+            // 2. Prevent duplicate requests from same Email or Phone within a short timeframe
             const RECENT_SUBMISSION_WINDOW = 5 * 60 * 1000; // 5 minutes
             const recentSubmission = await Agent.findOne({
-                ipAddress,
-                browser,
+                $or: [{ email }, { phone }],
                 createdAt: { $gt: new Date(Date.now() - RECENT_SUBMISSION_WINDOW) }
             });
 
             if (recentSubmission) {
-                return ResponseHandler.error(res, 'Multiple submissions detected. Please wait a few minutes before trying again.', null, 429);
+                return res.status(429).json({
+                    success: false,
+                    errorCode: 'DUPLICATE_SUBMISSION',
+                    message: 'You have already submitted this application. Please wait a few minutes before trying again.'
+                });
             }
 
             // 3. Unique Email and Phone Validation
@@ -151,16 +179,34 @@ class InquiryController {
                 status: 'inactive',
                 approvalStatus: 'pending',
 
+                // Application Tracking
+                trackingToken: crypto.randomBytes(32).toString('hex'),
+                trackingTokenExpires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days default
+
                 // Tracking
                 ipAddress,
                 browser,
                 os,
 
+                // Coordinates
+                latitude: latitude ? parseFloat(latitude) : undefined,
+                longitude: longitude ? parseFloat(longitude) : undefined,
+
                 // Documents
                 documents: documents || []
             });
 
-            return ResponseHandler.success(res, 'Application submitted successfully. Our team will review your application and contact you shortly.');
+            // 6. Send "Under Review" Email
+            try {
+                const trackingLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/application-status?token=${agent.trackingToken}`;
+                await emailService.sendApplicationUnderReviewEmail(agent, trackingLink);
+            } catch (emailError) {
+                console.error('Failed to send under-review email:', emailError);
+            }
+
+            return ResponseHandler.success(res, 'Application submitted successfully. Our team will review your application and contact you shortly.', {
+                trackingToken: agent.trackingToken
+            });
 
         } catch (error) {
             console.error('Partner Application Error:', error);
@@ -224,9 +270,13 @@ class InquiryController {
                 return ResponseHandler.badRequest(res, 'Invalid verification code.');
             }
 
+            // CHECKPOINT: After OTP verification, check if email already exists
+            const existingAgent = await Agent.findOne({ email });
+            if (existingAgent) {
+                return ResponseHandler.badRequest(res, 'This email is already registered.');
+            }
+
             // Success - mark as verified in store so it can be checked during final submission if needed
-            // Or just return success. For now, we'll return success and the frontend will proceed.
-            // Ideally, we'd sign a short-lived token here to prove verification during submitPartnerApplication.
             stored.verified = true;
 
             return ResponseHandler.success(res, 'Email verified successfully.');
@@ -376,6 +426,52 @@ class InquiryController {
                 });
             }
             return ResponseHandler.serverError(res, 'Failed to upload documents.', error);
+        }
+    }
+
+    /**
+     * Get Application Status by Token
+     * GET /api/inquiry/application-status/:token
+     */
+    static async getApplicationStatus(req, res) {
+        try {
+            const { token } = req.params;
+            if (!token) {
+                return ResponseHandler.badRequest(res, 'Tracking token is required');
+            }
+
+            const agent = await Agent.findOne({ trackingToken: token });
+
+            if (!agent) {
+                return ResponseHandler.notFound(res, 'Invalid tracking token or application not found.');
+            }
+
+            // Expiry check (optional but recommended)
+            if (agent.trackingTokenExpires && agent.trackingTokenExpires < new Date()) {
+                return ResponseHandler.error(res, 'Tracking token has expired.', null, 401);
+            }
+
+            // Return safe data for public view
+            const statusData = {
+                firstName: agent.firstName,
+                lastName: agent.lastName,
+                companyName: agent.companyName,
+                email: agent.email,
+                approvalStatus: agent.approvalStatus,
+                status: agent.status,
+                submittedAt: agent.createdAt,
+                phase: agent.approvalStatus === 'pending' ? 'Verification' : 'Completed',
+                details: {
+                    city: agent.city,
+                    country: agent.country,
+                    partnershipType: agent.partnershipType
+                }
+            };
+
+            return ResponseHandler.success(res, 'Application status retrieved successfully', statusData);
+        } catch (error) {
+            console.error('Get Application Status Error:', error);
+            return ResponseHandler.serverError(res, 'Failed to fetch status.', error);
         }
     }
 }

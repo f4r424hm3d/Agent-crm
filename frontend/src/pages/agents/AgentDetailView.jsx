@@ -4,8 +4,11 @@ import { useSelector } from 'react-redux';
 import {
     User, Building, Mail, Phone, Globe, MapPin,
     TrendingUp, Award, FileText, CheckCircle, XCircle, Shield,
-    Clock, ExternalLink, CheckCircle2, UserCircle2, Loader2, AlertCircle, ChevronLeft
+    Clock, ExternalLink, CheckCircle2, UserCircle2, Loader2, AlertCircle, ChevronLeft,
+    Edit2, Save, X
 } from 'lucide-react';
+import { validateFullAgent } from '../../utils/validation/agent/agentEditValidation';
+import PageHeader from '../../components/layout/PageHeader';
 import agentService from '../../services/agentService';
 import {
     AlertDialog,
@@ -20,16 +23,50 @@ import {
 import { useToast } from '../../components/ui/toast';
 import AgentDocumentUpload from '../../components/agents/AgentDocumentUpload';
 
-const DataField = ({ label, value, type = "text", icon: Icon, mono = false }) => (
-    <div className="space-y-1">
-        <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
-            {label}
-        </label>
+const DataField = ({ label, value, name, isEditing, onChange, type = "text", icon: Icon, mono = false, options = [] }) => {
+    const content = isEditing ? (
+        type === 'select' ? (
+            <select
+                name={name}
+                value={value || ''}
+                onChange={(e) => onChange(name, e.target.value)}
+                className="w-full bg-white border border-blue-400 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+            >
+                <option value="">Select {label}</option>
+                {options.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+        ) : type === 'textarea' ? (
+            <textarea
+                name={name}
+                value={value || ''}
+                onChange={(e) => onChange(name, e.target.value)}
+                rows={4}
+                className="w-full bg-white border border-blue-400 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+            />
+        ) : (
+            <input
+                type={type}
+                name={name}
+                value={value || ''}
+                onChange={(e) => onChange(name, e.target.value)}
+                className="w-full bg-white border border-blue-400 rounded-xl px-4 py-2.5 text-sm font-bold text-gray-900 outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+        )
+    ) : (
         <div className={`bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-900 w-full flex items-center ${mono ? 'font-mono' : ''} ${type === 'textarea' ? 'min-h-[80px] items-start whitespace-pre-wrap' : ''}`}>
             {value || <span className="text-gray-400 italic">Not Provided</span>}
         </div>
-    </div>
-);
+    );
+
+    return (
+        <div className="space-y-1">
+            <label className="text-[10px] font-bold text-gray-400 uppercase tracking-widest ml-1">
+                {label}
+            </label>
+            {content}
+        </div>
+    );
+};
 
 const SectionHeader = ({ title, icon: Icon }) => (
     <div className="bg-gray-100/50 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
@@ -52,6 +89,11 @@ const AgentDetailView = () => {
     const [activeSection, setActiveSection] = useState('overview');
     const [confirmAction, setConfirmAction] = useState({ type: null, isOpen: false });
 
+    // Inline Edit State
+    const [isEditing, setIsEditing] = useState(false);
+    const [editData, setEditData] = useState(null);
+    const [saveLoading, setSaveLoading] = useState(false);
+
     const sectionRefs = {
         overview: useRef(null),
         company: useRef(null),
@@ -70,12 +112,51 @@ const AgentDetailView = () => {
             const response = await agentService.getAgentById(id);
             const agentData = response.data?.agent || response.agent || response.data || response;
             setAgent(agentData);
+            setEditData(agentData);
         } catch (err) {
             console.error(err);
             setError(err.response?.data?.message || 'Failed to load agent details');
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleEditChange = (name, value) => {
+        setEditData(prev => ({ ...prev, [name]: value }));
+    };
+
+    const handleArrayToggle = (field, value) => {
+        const current = editData[field] || [];
+        const updated = current.includes(value)
+            ? current.filter(v => v !== value)
+            : [...current, value];
+        setEditData(prev => ({ ...prev, [field]: updated }));
+    };
+
+    const handleSave = async () => {
+        const validationErrors = validateFullAgent(editData);
+        if (Object.keys(validationErrors).length > 0) {
+            toast.error(Object.values(validationErrors)[0]);
+            return;
+        }
+
+        try {
+            setSaveLoading(true);
+            await agentService.updateAgent(id, editData);
+            setAgent(editData);
+            setIsEditing(false);
+            success('Profile updated successfully!');
+        } catch (err) {
+            console.error(err);
+            toast.error(err.response?.data?.message || 'Failed to update profile');
+        } finally {
+            setSaveLoading(false);
+        }
+    };
+
+    const handleCancel = () => {
+        setEditData(agent);
+        setIsEditing(false);
     };
 
     const handleAction = async () => {
@@ -210,28 +291,117 @@ const AgentDetailView = () => {
 
 
     return (
-        <div className="max-w-[1500px] mx-auto space-y-10 pb-20">
-            {/* Top Bar */}
-            <div className="flex items-center justify-between pb-2 pt-6 px-6">
-                <button
-                    onClick={() => navigate('/agents')}
-                    className="flex items-center gap-3 px-6 py-3 bg-white text-gray-700 rounded-2xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-black text-sm"
-                >
-                    <ChevronLeft className="w-5 h-5" />
-                    Back
-                </button>
-                <div className="flex items-center gap-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5 ${getStatusColor(agent?.approvalStatus)}`}>
-                        {agent?.approvalStatus === 'approved' && <CheckCircle2 className="w-3 h-3" />}
-                        {agent?.approvalStatus === 'pending' && <Clock className="w-3 h-3" />}
-                        {(agent?.approvalStatus || 'pending').toUpperCase()}
-                    </span>
+        <div className="p-6 max-w-[1500px] mx-auto space-y-6 pb-20">
+            <PageHeader
+                breadcrumbs={[
+                    { label: 'Dashboard', link: '/dashboard' },
+                    { label: 'Agents List', link: '/agents' },
+                    { label: 'Agent Details' }
+                ]}
+            />
+
+            <div className="mb-6 px-4 sm:px-6">
+
+                {/* Mobile Layout */}
+                <div className="flex flex-col gap-4 sm:hidden">
+                    <h1 className="text-2xl font-bold text-gray-800">
+                        Agent Details
+                    </h1>
+
+                    {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                        isEditing ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saveLoading}
+                                    className="w-1/2 flex justify-center items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all font-bold text-sm"
+                                >
+                                    {saveLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Save className="w-4 h-4" />
+                                    )}
+                                    Save
+                                </button>
+
+                                <button
+                                    onClick={handleCancel}
+                                    className="w-1/2 flex justify-center items-center gap-2 px-6 py-2.5 bg-white text-gray-700 rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-bold text-sm"
+                                >
+                                    <X className="w-4 h-4" />
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="w-full flex justify-center items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-bold text-sm"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                                Edit Profile
+                            </button>
+                        )
+                    )}
                 </div>
+
+                {/* Desktop Layout */}
+                <div className="hidden sm:flex justify-between items-center">
+                    <h1 className="text-2xl font-bold text-gray-800">
+                        Agent Details
+                    </h1>
+
+                    {(user?.role === 'ADMIN' || user?.role === 'SUPER_ADMIN') && (
+                        isEditing ? (
+                            <div className="flex gap-2">
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saveLoading}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl shadow-lg shadow-green-100 hover:bg-green-700 transition-all font-bold text-sm"
+                                >
+                                    {saveLoading ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    ) : (
+                                        <Save className="w-4 h-4" />
+                                    )}
+                                    Save
+                                </button>
+
+                                <button
+                                    onClick={handleCancel}
+                                    className="flex items-center gap-2 px-6 py-2.5 bg-white text-gray-700 rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-bold text-sm"
+                                >
+                                    <X className="w-4 h-4" />
+                                    Cancel
+                                </button>
+                            </div>
+                        ) : (
+                            <button
+                                onClick={() => setIsEditing(true)}
+                                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-100 hover:bg-blue-700 transition-all font-bold text-sm"
+                            >
+                                <Edit2 className="w-4 h-4" />
+                                Edit Profile
+                            </button>
+                        )
+                    )}
+                </div>
+
             </div>
 
+            {/* Mobile Back Button (only visible on smallest screens) */}
+            {/* <div className="sm:hidden px-4 mb-4">
+                <button
+                    onClick={() => navigate('/agents')}
+                    className="flex items-center justify-center gap-2 w-full px-4 py-2.5 bg-white text-gray-700 rounded-xl shadow-sm border border-gray-100 hover:bg-gray-50 transition-all font-bold text-sm"
+                >
+                    <ChevronLeft className="w-4 h-4" />
+                    Back to List
+                </button>
+            </div> */}
+
             {/* Sticky Navigation */}
-            <div className="">
-                <div className="bg-white/90 p-1.5 rounded-2xl border border-gray-200 shadow-xl shadow-gray-200/50 max-w-4xl mx-auto flex overflow-x-auto no-scrollbar gap-1">
+            <div className="px-4 sm:px-6">
+                <div className="bg-white/90 p-1.5 rounded-2xl border border-gray-200 shadow-xl shadow-gray-200/50 max-w-4xl mx-auto flex overflow-x-auto no-scrollbar gap-1 custom-scrollbar">
                     {[
                         { id: 'overview', label: 'Overview' },
                         { id: 'company', label: 'Company' },
@@ -281,7 +451,7 @@ const AgentDetailView = () => {
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
                     {/* Left Profile Card */}
-                    <div className="lg:col-span-4 space-y-6 sticky top-20">
+                    <div className="lg:col-span-4 space-y-6 lg:sticky lg:top-24">
                         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
                             <div className="h-32 bg-gradient-to-br from-blue-600 to-indigo-700 relative overflow-hidden">
                                 <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
@@ -428,12 +598,20 @@ const AgentDetailView = () => {
                             )}
 
                             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <DataField label="First Name" value={agent.firstName} />
-                                <DataField label="Last Name" value={agent.lastName} />
-                                <DataField label="Primary Email" value={agent.email} mono />
-                                <DataField label="Job Designation" value={agent.designation} />
-                                <DataField label="Exp. Level" value={agent.experience} />
-                                <DataField label="Alternate Phone" value={agent.alternatePhone} mono />
+                                <DataField label="First Name" value={editData.firstName} name="firstName" isEditing={isEditing} onChange={handleEditChange} />
+                                <DataField label="Last Name" value={editData.lastName} name="lastName" isEditing={isEditing} onChange={handleEditChange} />
+                                <DataField label="Primary Email" value={editData.email} name="email" isEditing={isEditing} onChange={handleEditChange} mono />
+                                <DataField label="Job Designation" value={editData.designation} name="designation" isEditing={isEditing} onChange={handleEditChange} />
+                                <DataField
+                                    label="Exp. Level"
+                                    value={editData.experience}
+                                    name="experience"
+                                    isEditing={isEditing}
+                                    onChange={handleEditChange}
+                                    type="select"
+                                    options={['1-2 years', '3-5 years', '6-10 years', '11-15 years', '15+ years']}
+                                />
+                                <DataField label="Alternate Phone" value={editData.alternatePhone} name="alternatePhone" isEditing={isEditing} onChange={handleEditChange} mono />
                             </div>
                         </div>
 
@@ -442,17 +620,35 @@ const AgentDetailView = () => {
                             <SectionHeader title="Corporation Profile" icon={Building} />
                             <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="md:col-span-2">
-                                    <DataField label="Company Name" value={agent.companyName} />
+                                    <DataField label="Company Name" value={editData.companyName} name="companyName" isEditing={isEditing} onChange={handleEditChange} />
                                 </div>
-                                <DataField label="Business Type" value={agent.companyType} />
-                                <DataField label="Registration No." value={agent.registrationNumber} mono />
-                                <DataField label="Founding Year" value={agent.establishedYear} />
-                                <DataField label="Website" value={agent.website ? <a href={agent.website} target="_blank" className="text-blue-600 font-bold flex items-center gap-1">{agent.website} <ExternalLink className="w-3 h-3" /></a> : 'N/A'} />
+                                <DataField
+                                    label="Business Type"
+                                    value={editData.companyType}
+                                    name="companyType"
+                                    isEditing={isEditing}
+                                    onChange={handleEditChange}
+                                    type="select"
+                                    options={['Private Limited', 'Public Limited', 'Partnership', 'Proprietorship', 'LLP', 'NGO / Trust']}
+                                />
+                                <DataField label="Registration No." value={editData.registrationNumber} name="registrationNumber" isEditing={isEditing} onChange={handleEditChange} mono />
+                                <DataField label="Founding Year" value={editData.establishedYear} name="establishedYear" isEditing={isEditing} onChange={handleEditChange} type="number" />
+                                <DataField label="Website"
+                                    value={isEditing ? editData.website : (agent.website ? <a href={agent.website} target="_blank" className="text-blue-600 font-bold flex items-center gap-1">{agent.website} <ExternalLink className="w-3 h-3" /></a> : 'N/A')}
+                                    name="website" isEditing={isEditing} onChange={handleEditChange} />
                                 <div className="md:col-span-2">
-                                    <DataField label="Full Address" value={agent.address} type="textarea" />
+                                    <DataField label="Full Address" value={editData.address} name="address" isEditing={isEditing} onChange={handleEditChange} type="textarea" />
                                 </div>
-                                <DataField label="Postal Code" value={agent.pincode} mono />
-                                <DataField label="Country" value={agent.country} />
+                                <DataField label="Postal Code" value={editData.pincode} name="pincode" isEditing={isEditing} onChange={handleEditChange} mono />
+                                <DataField
+                                    label="Country"
+                                    value={editData.country}
+                                    name="country"
+                                    isEditing={isEditing}
+                                    onChange={handleEditChange}
+                                    type="select"
+                                    options={['India', 'USA', 'UK', 'Canada', 'Australia']}
+                                />
                             </div>
                         </div>
 
@@ -463,23 +659,81 @@ const AgentDetailView = () => {
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                                     <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
                                         <p className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Company Size</p>
-                                        <p className="text-lg font-black text-blue-800">{agent.teamSize || 'N/A'}</p>
+                                        {isEditing ? (
+                                            <select
+                                                value={editData.teamSize || ''}
+                                                onChange={(e) => handleEditChange('teamSize', e.target.value)}
+                                                className="w-full bg-white border border-blue-400 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 outline-none"
+                                            >
+                                                <option value="">Select size</option>
+                                                {['1-5 members', '6-10 members', '11-25 members', '26-50 members', '50+ members'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                            </select>
+                                        ) : (
+                                            <p className="text-lg font-black text-blue-800">{agent.teamSize || 'N/A'}</p>
+                                        )}
                                     </div>
                                     <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100">
                                         <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Annual Revenue</p>
-                                        <p className="text-lg font-black text-emerald-800">{agent.annualRevenue || 'N/A'}</p>
+                                        {isEditing ? (
+                                            <select
+                                                value={editData.annualRevenue || ''}
+                                                onChange={(e) => handleEditChange('annualRevenue', e.target.value)}
+                                                className="w-full bg-white border border-emerald-400 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 outline-none"
+                                            >
+                                                <option value="">Select range</option>
+                                                {['Under 10 Lakhs', '10-25 Lakhs', '25-50 Lakhs', '50 Lakhs - 1 Crore', '1-5 Crores', '5+ Crores'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                            </select>
+                                        ) : (
+                                            <p className="text-lg font-black text-emerald-800">{agent.annualRevenue || 'N/A'}</p>
+                                        )}
                                     </div>
                                     <div className="bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
                                         <p className="text-[10px] font-black text-indigo-500 uppercase tracking-widest mb-1">Partner Type</p>
-                                        <p className="text-lg font-black text-indigo-800 capitalize">{agent.partnershipType || 'Regular'}</p>
+                                        {isEditing ? (
+                                            <select
+                                                value={editData.partnershipType || ''}
+                                                onChange={(e) => handleEditChange('partnershipType', e.target.value)}
+                                                className="w-full bg-white border border-indigo-400 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 outline-none"
+                                            >
+                                                <option value="">Select type</option>
+                                                {['Authorized Representative', 'Regional Partner', 'Referral Partner', 'Franchise Partner'].map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                            </select>
+                                        ) : (
+                                            <p className="text-lg font-black text-indigo-800 capitalize">{agent.partnershipType || 'Regular'}</p>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="space-y-6">
-                                    <DataField label="Expected Flow" value={`${agent.expectedStudents || '0'} Students/Year`} />
-                                    <DataField label="Marketing Budget" value={agent.marketingBudget} />
+                                    <DataField
+                                        label="Expected Flow"
+                                        value={editData.expectedStudents}
+                                        name="expectedStudents"
+                                        isEditing={isEditing}
+                                        onChange={handleEditChange}
+                                        type="select"
+                                        options={['10-25', '26-50', '51-100', '100+']}
+                                    />
+                                    <DataField
+                                        label="Marketing Budget"
+                                        value={editData.marketingBudget}
+                                        name="marketingBudget"
+                                        isEditing={isEditing}
+                                        onChange={handleEditChange}
+                                        type="select"
+                                        options={['Under 1 Lakh', '1-5 Lakhs', '5-10 Lakhs', '10+ Lakhs']}
+                                    />
                                     <div className="p-4 bg-amber-50/50 rounded-2xl border border-amber-100">
                                         <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-2 block">The Pitch / Proposal</label>
-                                        <p className="text-sm text-gray-700 italic">"{agent.whyPartner || 'No statement provided.'}"</p>
+                                        {isEditing ? (
+                                            <textarea
+                                                value={editData.whyPartner || ''}
+                                                onChange={(e) => handleEditChange('whyPartner', e.target.value)}
+                                                rows={4}
+                                                className="w-full bg-white border border-amber-400 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 outline-none"
+                                            />
+                                        ) : (
+                                            <p className="text-sm text-gray-700 italic">"{agent.whyPartner || 'No statement provided.'}"</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -492,21 +746,51 @@ const AgentDetailView = () => {
                                 <div>
                                     <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-3 block">Specializations</label>
                                     <div className="flex flex-wrap gap-2">
-                                        {agent.specialization?.map((spec, i) => (
-                                            <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-100">
-                                                {spec}
-                                            </span>
-                                        )) || <span className="text-gray-400 italic text-sm">None listed</span>}
+                                        {isEditing ? (
+                                            ['MBBS Admissions', 'Medical Counseling', 'Visa Assistance', 'International Admissions', 'Student Support', 'Career Guidance', 'NEET Coaching', 'Abroad Studies', 'Scholarship Guidance', 'University Partnerships', 'Student Mentoring', 'Documentation', 'Pre-departure Support'].map(opt => (
+                                                <button
+                                                    key={opt}
+                                                    onClick={() => handleArrayToggle('specialization', opt)}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${editData.specialization?.includes(opt)
+                                                        ? 'bg-blue-600 text-white border-blue-600 shadow-md scale-105'
+                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-blue-200 hover:text-blue-600'
+                                                        }`}
+                                                >
+                                                    {opt}
+                                                </button>
+                                            ))
+                                        ) : (
+                                            agent.specialization?.map((spec, i) => (
+                                                <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-700 text-xs font-bold rounded-xl border border-blue-100">
+                                                    {spec}
+                                                </span>
+                                            )) || <span className="text-gray-400 italic text-sm">None listed</span>
+                                        )}
                                     </div>
                                 </div>
                                 <div>
                                     <label className="text-[10px] uppercase font-black text-gray-400 tracking-widest mb-3 block">Services Offered</label>
                                     <div className="flex flex-wrap gap-2">
-                                        {agent.servicesOffered?.map((serv, i) => (
-                                            <span key={i} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100">
-                                                {serv}
-                                            </span>
-                                        )) || <span className="text-gray-400 italic text-sm">None listed</span>}
+                                        {isEditing ? (
+                                            ['Admission Counseling', 'Visa Processing', 'Accommodation Assistance', 'Travel Arrangements', 'Document Verification', 'Scholarship Guidance', 'Career Counseling', 'Test Preparation', 'University Selection', 'Application Processing', 'Financial Planning', 'Post-arrival Support'].map(opt => (
+                                                <button
+                                                    key={opt}
+                                                    onClick={() => handleArrayToggle('servicesOffered', opt)}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold border transition-all ${editData.servicesOffered?.includes(opt)
+                                                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-md scale-105'
+                                                        : 'bg-white text-gray-500 border-gray-200 hover:border-emerald-200 hover:text-emerald-600'
+                                                        }`}
+                                                >
+                                                    {opt}
+                                                </button>
+                                            ))
+                                        ) : (
+                                            agent.servicesOffered?.map((serv, i) => (
+                                                <span key={i} className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-xs font-bold rounded-xl border border-emerald-100">
+                                                    {serv}
+                                                </span>
+                                            )) || <span className="text-gray-400 italic text-sm">None listed</span>
+                                        )}
                                     </div>
                                 </div>
                             </div>

@@ -1,10 +1,13 @@
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { User, Agent, Student } = require('../models');
 const ResponseHandler = require('../utils/responseHandler');
 const AuditService = require('../services/auditService');
 const emailService = require('../services/emailService');
 const logger = require('../utils/logger');
 const { USER_ROLES, AGENT_APPROVAL_STATUS } = require('../utils/constants');
+const { generateAgentCode } = require('../utils/agentCodeGenerator');
+const { moveFileToEntityFolder } = require('../services/storageService');
 
 class AuthController {
   /**
@@ -126,6 +129,11 @@ class AuthController {
         );
       }
 
+      // Check login permission
+      if (agent.canLogin === false) {
+        return ResponseHandler.forbidden(res, 'Access denied. You do not have permission to login.');
+      }
+
       // Generate JWT token
       const token = jwt.sign(
         {
@@ -175,7 +183,8 @@ class AuthController {
 
     try {
       const {
-        name,
+        firstName,
+        lastName,
         email,
         phone,
         password,
@@ -191,8 +200,8 @@ class AuthController {
         account_holder_name,
         ifsc_code,
         swift_code,
-        website, // Added field
-        registration_number // Added field (snake_case from frontend likely, or need to standardize)
+        website,
+        registration_number
       } = req.body;
 
       // Note: Frontend likely sends 'companyRegistrationNumber' or similar. 
@@ -208,13 +217,6 @@ class AuthController {
         return ResponseHandler.badRequest(res, 'All documents are required for registration.');
       }
 
-      // Check for specific required documents if needed:
-      // const requiredDocs = ['idProof', 'companyLicence', 'agentPhoto', 'identityDocument', 'companyRegistration', 'resume', 'companyPhoto'];
-      // const missingDocs = requiredDocs.filter(doc => !files[doc]);
-      // if (missingDocs.length > 0) {
-      //   return ResponseHandler.badRequest(res, `Missing documents: ${missingDocs.join(', ')}`);
-      // }
-
       // Check if email exists
       const existingAgent = await Agent.findOne({ email });
       if (existingAgent) {
@@ -223,9 +225,14 @@ class AuthController {
         return ResponseHandler.error(res, 'Email already exists', 400);
       }
 
+      // Generate unique agentCode
+      const agentCode = await generateAgentCode();
+
       // Create agent first to get ID
       const agent = await Agent.create({
-        name,
+        agentCode,
+        firstName,
+        lastName,
         email,
         phone,
         password,
@@ -248,36 +255,14 @@ class AuthController {
       });
 
       // Handle Documents
-      // const documentsBaseDir = path.join(__dirname, '../../uploads/documents/agent');
-      const documentsBaseDir = path.join(__dirname, '../../uploads/documents/agents');
-      const safeName = (agent.name).replace(/[^a-z0-9]/gi, '');
-      const dateStr = agent.createdAt ? new Date(agent.createdAt).getTime() : Date.now();
-      const folderName = `${safeName}_${agent._id}_${dateStr}`;
-      const agentFolder = path.join(documentsBaseDir, folderName);
-
-      if (!fs.existsSync(agentFolder)) {
-        fs.mkdirSync(agentFolder, { recursive: true });
-      }
-
       const documentPaths = new Map();
-
-      for (const [fieldName, fileArray] of Object.entries(files)) {
-        const file = fileArray[0];
-        const ext = path.extname(file.originalname);
-        const newFileName = `${fieldName}${ext}`;
-        const targetPath = path.join(agentFolder, newFileName);
-
-        try {
-          fs.renameSync(file.path, targetPath);
-        } catch (err) {
-          fs.copyFileSync(file.path, targetPath);
-          fs.unlinkSync(file.path);
+      if (files) {
+        for (const [fieldName, fileArray] of Object.entries(files)) {
+          const file = fileArray[0];
+          // Use unified storage service
+          const relativePath = moveFileToEntityFolder(file, agent, fieldName, 'agents');
+          documentPaths.set(fieldName, relativePath);
         }
-
-        // const relativePath = `uploads/documents/agent/${folderName}/${newFileName}`;
-        const relativePath = `uploads/documents/agents/${folderName}/${newFileName}`;
-
-        documentPaths.set(fieldName, relativePath);
       }
 
       agent.documents = documentPaths;
@@ -288,7 +273,7 @@ class AuthController {
 
       // Log audit
       await AuditService.logCreate(null, 'Agent', agent._id, {
-        agentName: agent.name,
+        agentName: `${agent.firstName} ${agent.lastName}`,
         email: agent.email,
         description: 'Self-registration with documents'
       }, req);
@@ -305,9 +290,11 @@ class AuthController {
         }
       );
     } catch (error) {
-      // Cleanup files
+      // Cleanup temp files on error
       if (req.files) {
-        Object.values(req.files).flat().forEach(file => { try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch (e) { } });
+        Object.values(req.files).flat().forEach(file => {
+          if (fs.existsSync(file.path)) fs.unlinkSync(file.path);
+        });
       }
       logger.error('Agent registration error', { error: error.message });
       return ResponseHandler.serverError(res, 'Registration failed', error);
@@ -439,8 +426,10 @@ class AuthController {
     try {
       const { token, password } = req.body;
 
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
       const student = await Student.findOne({
-        passwordSetupToken: token,
+        passwordSetupToken: hashedToken,
         passwordSetupExpires: { $gt: Date.now() }
       });
 
@@ -552,8 +541,10 @@ class AuthController {
     try {
       const { token, password } = req.body;
 
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
       const student = await Student.findOne({
-        passwordResetToken: token,
+        passwordResetToken: hashedToken,
         passwordResetExpires: { $gt: Date.now() }
       });
 
@@ -652,9 +643,11 @@ class AuthController {
         return ResponseHandler.badRequest(res, validation.errors.join(', '));
       }
 
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+
       // Find agent by token
       const agent = await Agent.findOne({
-        passwordSetupToken: token,
+        passwordSetupToken: hashedToken,
         passwordSetupExpires: { $gt: Date.now() }
       });
 
@@ -744,10 +737,11 @@ class AuthController {
 
         // Generate new password setup token (expires in 24 hours)
         const setupToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(setupToken).digest('hex');
         const tokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
         // Update user with new token
-        user.passwordSetupToken = setupToken;
+        user.passwordSetupToken = hashedToken;
         user.passwordSetupExpires = tokenExpires;
         await user.save();
 
@@ -956,47 +950,49 @@ class AuthController {
 
       let user = null;
       let tableName = '';
+      const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
       // Find user by reset token based on role
       if (role === 'STUDENT') {
         user = await Student.findOne({
-          passwordResetToken: token,
+          passwordResetToken: hashedToken,
           passwordResetExpires: { $gt: Date.now() }
         });
         tableName = 'Student';
       } else if (role === 'AGENT') {
         user = await Agent.findOne({
-          passwordResetToken: token,
+          passwordResetToken: hashedToken,
           passwordResetExpires: { $gt: Date.now() }
         });
         tableName = 'Agent';
       } else if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
         user = await User.findOne({
-          passwordResetToken: token,
+          passwordResetToken: hashedToken,
           passwordResetExpires: { $gt: Date.now() }
         });
         tableName = 'User';
       } else {
         // If no role provided, try all tables (backward compatibility)
         user = await Agent.findOne({
-          passwordResetToken: token,
+          passwordResetToken: hashedToken,
           passwordResetExpires: { $gt: Date.now() }
         });
         if (user) {
           tableName = 'Agent';
         } else {
           user = await Student.findOne({
-            passwordResetToken: token,
+            passwordResetToken: hashedToken,
             passwordResetExpires: { $gt: Date.now() }
           });
-          if (user) tableName = 'Student';
-        }
-        if (!user) {
-          user = await User.findOne({
-            passwordResetToken: token,
-            passwordResetExpires: { $gt: Date.now() }
-          });
-          if (user) tableName = 'User';
+          if (user) {
+            tableName = 'Student';
+          } else {
+            user = await User.findOne({
+              passwordResetToken: hashedToken,
+              passwordResetExpires: { $gt: Date.now() }
+            });
+            if (user) tableName = 'User';
+          }
         }
       }
 

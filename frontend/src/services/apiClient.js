@@ -37,12 +37,46 @@ apiClient.interceptors.response.use(
           code: error.code
         }
       }));
-    } else if (error.response.status === 401) {
-      // Unauthorized - clear token and redirect to login
+    } else if (error.response.status === 401 || (error.response.status === 403 && !error.response.data.requiredRoles)) {
+      // Don't redirect if it's a login attempt failure (Invalid credentials)
+      const isLoginRequest = error.config.url.includes('/auth/login') ||
+        error.config.url.includes('/auth/agent-login') ||
+        error.config.url.includes('/auth/student-login');
+
+      if (isLoginRequest) {
+        return Promise.reject(error);
+      }
+
+      // Check for specific logout reason
+      if (error.response.data && error.response.data.reason) {
+        localStorage.setItem('logoutReason', error.response.data.reason);
+      }
+
+      // Extract role before clearing to maintain redirect context
+      let roleRedirect = '';
+      try {
+        // First try to get role from server response
+        let role = error.response.data?.role;
+
+        // Fallback to localStorage
+        if (!role) {
+          const user = JSON.parse(localStorage.getItem('user'));
+          role = user?.role;
+        }
+
+        if (role) {
+          roleRedirect = `?role=${role.toUpperCase()}`;
+        }
+      } catch (e) {
+        console.error('Error determining role for redirect', e);
+      }
+
+      // Unauthorized or Account Blocked - clear token and redirect to login
       localStorage.removeItem('token');
       localStorage.removeItem('user');
+
       // Dispatch event or redirect
-      window.location.href = '/login';
+      window.location.href = `/login${roleRedirect}`;
     }
     return Promise.reject(error);
   }

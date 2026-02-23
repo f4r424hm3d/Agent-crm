@@ -20,6 +20,8 @@ import StudentForgotPassword from "./pages/auth/student/StudentForgotPassword";
 import StudentVerifyOTP from "./pages/auth/student/StudentVerifyOTP";
 import StudentResetPassword from "./pages/auth/student/StudentResetPassword";
 import PartnerApplicationForm from "./pages/public/PartnerApplicationForm";
+import ApplicationStatus from "./pages/public/ApplicationStatus";
+import AgentRegistrationSuccess from './pages/public/AgentRegistrationSuccess';
 
 // Dashboard Pages
 import Dashboard from "./pages/Dashboard";
@@ -45,7 +47,6 @@ import Settings from './pages/admin/Settings';
 import MailSignatures from './pages/admin/MailSignatures';
 import PendingAgents from "./pages/agents/PendingAgents";
 import AdminCreateAgent from "./pages/agents/AdminCreateAgent";
-import AdminEditAgent from "./pages/agents/AdminEditAgent";
 import AgentBrochures from "./pages/agent/AgentBrochures";
 
 // University Pages
@@ -178,6 +179,8 @@ function AppContent() {
       <Route path="/login" element={<Login />} />
       <Route path="/register/agent" element={<RegisterAgent />} />
       <Route path="/agent-register" element={<PartnerApplicationForm />} />
+      <Route path="/application-status" element={<ApplicationStatus />} />
+      <Route path="/application-success" element={<AgentRegistrationSuccess />} />
       <Route path="/setup-password" element={<SetupPassword />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/verify-otp" element={<VerifyOTP />} />
@@ -304,14 +307,6 @@ function AppContent() {
           element={
             <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
               <AdminCreateAgent />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="agents/edit/:id"
-          element={
-            <ProtectedRoute allowedRoles={[ROLES.SUPER_ADMIN, ROLES.ADMIN]}>
-              <AdminEditAgent />
             </ProtectedRoute>
           }
         />
